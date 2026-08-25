@@ -1,0 +1,37 @@
+name: Trading Bot
+
+on:
+  schedule:
+    - cron: '0 */6 * * *' # Every 6 hours (approx to loop limits)
+  workflow_dispatch: # Allows manual trigger
+
+jobs:
+  run-bot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360 # Matches max loop minutes
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+
+    - name: Run trading bot
+      env:
+        ALPACA_API_KEY: ${{ secrets.ALPACA_API_KEY }}
+        ALPACA_SECRET_KEY: ${{ secrets.ALPACA_SECRET_KEY }}
+        GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
+        GOOGLE_SHEET_ID: ${{ secrets.GOOGLE_SHEET_ID }}
+        PAPER_MODE: ${{ secrets.PAPER_MODE }}
+        WATCHLIST: ${{ secrets.WATCHLIST }}
+        MEAN_REVERSION_ELIGIBLE: ${{ secrets.MEAN_REVERSION_ELIGIBLE }}
+      run: |
+        python bot/main.py

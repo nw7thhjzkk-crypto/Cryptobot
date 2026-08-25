@@ -1,0 +1,3 @@
+[build]
+  functions = "dashboard/netlify/functions"
+  publish = "dashboard"

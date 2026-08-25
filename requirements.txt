@@ -1,0 +1,6 @@
+alpaca-py
+gspread
+google-auth
+python-dotenv
+pandas
+pandas_ta

@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trading Bot Dashboard</title>
+    <style>
+        body { font-family: sans-serif; padding: 20px; background-color: #f4f4f9; color: #333; }
+        h1, h2 { color: #222; }
+        .equity-box { background: #fff; padding: 15px; border-radius: 5px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); display: inline-block; margin-bottom: 20px; }
+        .equity-box p { margin: 5px 0; font-size: 1.1em; }
+        table { width: 100%; border-collapse: collapse; background: #fff; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-top: 10px; }
+        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }
+        th { background-color: #f8f9fa; }
+        .status-filled { color: green; font-weight: bold; }
+        .status-failed { color: red; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+    <h1>Trading Bot Dashboard</h1>
+
+    <div class="equity-box" id="equity-container">
+        <h2>Latest Equity</h2>
+        <p>Loading...</p>
+    </div>
+
+    <h2>Recent Trades</h2>
+    <table id="trades-table">
+        <thead>
+            <tr>
+                <th>Timestamp</th>
+                <th>Symbol</th>
+                <th>Side</th>
+                <th>Qty</th>
+                <th>Price</th>
+                <th>Regime</th>
+                <th>Sleeve</th>
+                <th>Status</th>
+                <th>Notes</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr><td colspan="9">Loading trades...</td></tr>
+        </tbody>
+    </table>
+
+    <script>
+        async function loadData() {
+            try {
+                const res = await fetch('/.netlify/functions/get-trades');
+                if (!res.ok) throw new Error('Network response was not ok');
+                const data = await res.json();
+
+                // Render Equity
+                const eqContainer = document.getElementById('equity-container');
+                if (data.equity) {
+                    eqContainer.innerHTML = `
+                        <h2>Latest Equity</h2>
+                        <p><strong>Total Equity:</strong> $${parseFloat(data.equity.equity || 0).toFixed(2)}</p>
+                        <p><strong>Cash:</strong> $${parseFloat(data.equity.cash || 0).toFixed(2)}</p>
+                        <p><strong>Buying Power:</strong> $${parseFloat(data.equity.buying_power || 0).toFixed(2)}</p>
+                        <p><small>Last updated: ${data.equity.timestamp}</small></p>
+                    `;
+                } else {
+                    eqContainer.innerHTML = `<p>No equity data available.</p>`;
+                }
+
+                // Render Trades
+                const tbody = document.querySelector('#trades-table tbody');
+                tbody.innerHTML = '';
+
+                if (data.trades && data.trades.length > 0) {
+                    data.trades.forEach(trade => {
+                        const tr = document.createElement('tr');
+                        const statusClass = trade.status === 'filled' ? 'status-filled' : (trade.status === 'failed' ? 'status-failed' : '');
+                        tr.innerHTML = `
+                            <td>${trade.timestamp.split('.')[0].replace('T', ' ')}</td>
+                            <td>${trade.symbol}</td>
+                            <td>${trade.side.toUpperCase()}</td>
+                            <td>${trade.qty}</td>
+                            <td>$${parseFloat(trade.price || 0).toFixed(2)}</td>
+                            <td>${trade.regime}</td>
+                            <td>${trade.sleeve}</td>
+                            <td class="${statusClass}">${trade.status}</td>
+                            <td>${trade.notes || ''}</td>
+                        `;
+                        tbody.appendChild(tr);
+                    });
+                } else {
+                    tbody.innerHTML = `<tr><td colspan="9">No trades found.</td></tr>`;
+                }
+
+            } catch (error) {
+                console.error("Error loading dashboard data:", error);
+                document.getElementById('equity-container').innerHTML = `<p style="color:red;">Failed to load data.</p>`;
+                document.querySelector('#trades-table tbody').innerHTML = `<tr><td colspan="9" style="color:red;">Failed to load trades.</td></tr>`;
+            }
+        }
+
+        loadData();
+    </script>
+</body>
+</html>
