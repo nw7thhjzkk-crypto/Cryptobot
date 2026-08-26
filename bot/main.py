@@ -1,7 +1,6 @@
 import time
 import logging
 from datetime import datetime, timezone
-import pandas_ta as ta
 
 from bot.config import (
     WATCHLIST, POLL_INTERVAL_SECONDS, LOOP_MAX_MINUTES,
@@ -12,7 +11,7 @@ from bot.broker import (
     get_account, get_positions
 )
 from bot.sheets import init_tabs, log_trade, update_positions, log_equity
-from bot.strategy import decide, get_middle_band
+from bot.strategy import decide, get_middle_band, calculate_atr
 from bot.risk import calculate_position_size, check_portfolio_risk, check_drawdown_breaker
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -110,7 +109,7 @@ def main_loop():
 
                 # Calculate size and risk for new buy
                 if action == "buy":
-                    atr_s = ta.atr(df['high'], df['low'], df['close'], length=14)
+                    atr_s = calculate_atr(df, length=14)
                     atr = atr_s.iloc[-1] if (atr_s is not None and not atr_s.empty) else 0
 
                     qty = calculate_position_size(equity, atr, RISK_PER_TRADE_PCT)

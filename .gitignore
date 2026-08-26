@@ -10,3 +10,5 @@ venv/
 env.bak/
 venv.bak/
 .netlify/
+dashboard/node_modules/
+dashboard/package-lock.json
