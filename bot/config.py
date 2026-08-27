@@ -21,8 +21,8 @@ GOOGLE_SHEET_ID = get_env_var("GOOGLE_SHEET_ID")
 _paper_mode_raw = str(get_env_var("PAPER_MODE", "true", required=False)).lower()
 PAPER_MODE = _paper_mode_raw not in ("false", "0", "f", "no")
 
-WATCHLIST = get_env_var("WATCHLIST", "AAPL,MSFT,SPY").split(",")
-MEAN_REVERSION_ELIGIBLE = get_env_var("MEAN_REVERSION_ELIGIBLE", "SPY").split(",")
+WATCHLIST = [s.strip() for s in get_env_var("WATCHLIST", "AAPL,MSFT,SPY").split(",") if s.strip()]
+MEAN_REVERSION_ELIGIBLE = [s.strip() for s in get_env_var("MEAN_REVERSION_ELIGIBLE", "SPY").split(",") if s.strip()]
 POLL_INTERVAL_SECONDS = int(get_env_var("POLL_INTERVAL_SECONDS", "60"))
 LOOP_MAX_MINUTES = int(get_env_var("LOOP_MAX_MINUTES", "350"))
 RISK_PER_TRADE_PCT = float(get_env_var("RISK_PER_TRADE_PCT", "0.01"))
