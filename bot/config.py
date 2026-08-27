@@ -17,7 +17,10 @@ ALPACA_API_KEY = get_env_var("ALPACA_API_KEY")
 ALPACA_SECRET_KEY = get_env_var("ALPACA_SECRET_KEY")
 GOOGLE_SERVICE_ACCOUNT_JSON = get_env_var("GOOGLE_SERVICE_ACCOUNT_JSON")
 GOOGLE_SHEET_ID = get_env_var("GOOGLE_SHEET_ID")
-PAPER_MODE = get_env_var("PAPER_MODE", "true").lower() == "true"
+
+_paper_mode_raw = str(get_env_var("PAPER_MODE", "true", required=False)).lower()
+PAPER_MODE = _paper_mode_raw not in ("false", "0", "f", "no")
+
 WATCHLIST = get_env_var("WATCHLIST", "AAPL,MSFT,SPY").split(",")
 MEAN_REVERSION_ELIGIBLE = get_env_var("MEAN_REVERSION_ELIGIBLE", "SPY").split(",")
 POLL_INTERVAL_SECONDS = int(get_env_var("POLL_INTERVAL_SECONDS", "60"))
