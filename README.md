@@ -15,7 +15,8 @@ This repository contains a Python-based paper trading bot that connects to the A
 
 *   **Alpaca API Keys**: Go to the Alpaca dashboard, switch to Paper Trading, and generate a new set of API keys.
 *   **Google Service Account JSON**: Go to the Google Cloud Console, create a project, enable the Google Sheets API and Google Drive API. Create a Service Account, generate a JSON key, and download it. Minimize the JSON to a single line to use as the `GOOGLE_SERVICE_ACCOUNT_JSON` secret.
-*   **Google Sheet ID**: Create a new Google Sheet. Share it with the email address of the Google Service Account you created. The Sheet ID is the long alphanumeric string in the URL between `/d/` and `/edit`.
+*   **Google Sheet ID**: Create a new Google Sheet. Share it with the email address of the Google Service Account you created (giving it Editor access). The Sheet ID is the long alphanumeric string in the URL between `/d/` and `/edit`.
+*   **Important for Dashboard**: To allow the client-side dashboard to read the Sheet without a backend, click "Share" in the top right of your Google Sheet, and change General Access to **"Anyone with the link can view"**.
 
 ### GitHub Repo Secrets (Settings -> Secrets and variables -> Actions)
 
@@ -28,11 +29,12 @@ Add the following secrets to match `bot/config.py`:
 *   `WATCHLIST`
 *   `MEAN_REVERSION_ELIGIBLE`
 
-### Netlify Environment Variables (Site settings -> Environment variables)
+## Using the Dashboard
 
-Add the following variables to match `get-trades.js`:
-*   `GOOGLE_SERVICE_ACCOUNT_JSON`
-*   `GOOGLE_SHEET_ID`
+The dashboard now runs entirely in the browser using the standalone `dashboard/index.html` file (no backend or Netlify required).
+1. Open `dashboard/index.html` in your browser (or host it statically).
+2. Enter your Google Sheet ID in the input box at the top right.
+3. Click "Load Data". (Ensure you completed the step above to make the sheet viewable).
 
 ## Testing the Bot Manually
 
