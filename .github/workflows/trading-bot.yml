@@ -34,4 +34,4 @@ jobs:
         WATCHLIST: ${{ secrets.WATCHLIST }}
         MEAN_REVERSION_ELIGIBLE: ${{ secrets.MEAN_REVERSION_ELIGIBLE }}
       run: |
-        python bot/main.py
+        python -m bot.main
