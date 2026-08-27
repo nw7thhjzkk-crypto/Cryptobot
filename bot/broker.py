@@ -11,6 +11,10 @@ from bot.config import ALPACA_API_KEY, ALPACA_SECRET_KEY, PAPER_MODE
 
 logger = logging.getLogger(__name__)
 
+api_key_preview = str(ALPACA_API_KEY)[:4] if ALPACA_API_KEY else "None"
+base_url = "https://paper-api.alpaca.markets" if PAPER_MODE else "https://api.alpaca.markets"
+logger.info(f"Initializing Alpaca TradingClient. PAPER_MODE={PAPER_MODE}, Base URL={base_url}, API_KEY startswith={api_key_preview}")
+
 trading_client = TradingClient(ALPACA_API_KEY, ALPACA_SECRET_KEY, paper=PAPER_MODE)
 data_client = StockHistoricalDataClient(ALPACA_API_KEY, ALPACA_SECRET_KEY)
 

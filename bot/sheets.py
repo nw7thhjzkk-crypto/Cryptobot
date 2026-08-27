@@ -12,8 +12,23 @@ SCOPES = [
 ]
 
 def get_client():
+    raw_json = GOOGLE_SERVICE_ACCOUNT_JSON
+    if raw_json is None:
+        logger.error("GOOGLE_SERVICE_ACCOUNT_JSON is None")
+        return None
+
+    raw_json = str(raw_json).strip()
+    raw_json = raw_json.replace('“', '"').replace('”', '"').replace("‘", "'").replace("’", "'")
+
     try:
-        creds_dict = json.loads(GOOGLE_SERVICE_ACCOUNT_JSON)
+        creds_dict = json.loads(raw_json)
+    except Exception as e:
+        safe_str = raw_json
+        if len(safe_str) > 40:
+            safe_str = f"{safe_str[:20]}...{safe_str[-20:]}"
+        raise ValueError(f"Error parsing GOOGLE_SERVICE_ACCOUNT_JSON: {e}. String preview: {safe_str}") from e
+
+    try:
         creds = Credentials.from_service_account_info(creds_dict, scopes=SCOPES)
         return gspread.authorize(creds)
     except Exception as e:
