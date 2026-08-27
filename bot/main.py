@@ -79,8 +79,12 @@ def main_loop():
                 # Get price history
                 hist_res = get_price_history(symbol, lookback_days=100)
                 if not hist_res["success"]:
+                    logger.warning(f"Failed to fetch price history for {symbol}")
                     continue
                 df = hist_res["data"]
+
+                num_bars = len(df) if df is not None else 0
+                logger.info(f"Fetched {num_bars} bars for {symbol}")
 
                 # Check for existing position
                 existing_pos = next((p for p in open_positions if p['symbol'] == symbol), None)
@@ -89,6 +93,8 @@ def main_loop():
                 action = decision["action"]
                 regime = decision["regime"]
                 sleeve = decision["sleeve"]
+
+                logger.info(f"Symbol: {symbol} | Regime: {regime} | Sleeve: {sleeve} | Action: {action}")
 
                 watchlist_updates.append([symbol, regime, now_str])
 
