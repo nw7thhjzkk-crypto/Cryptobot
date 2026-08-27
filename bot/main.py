@@ -10,7 +10,7 @@ from bot.broker import (
     get_latest_price, get_price_history, submit_market_order,
     get_account, get_positions
 )
-from bot.sheets import init_tabs, log_trade, update_positions, log_equity
+from bot.sheets import init_tabs, log_trade, update_positions, log_equity, update_watchlist
 from bot.strategy import decide, get_middle_band, calculate_atr
 from bot.risk import calculate_position_size, check_portfolio_risk, check_drawdown_breaker
 
@@ -56,8 +56,10 @@ def main_loop():
 
             # Log equity & positions every ~10 iterations (or first iteration)
             if iteration % 10 == 1:
-                now_str = datetime.now(timezone.utc).isoformat()
-                log_equity([now_str, equity, cash, buying_power])
+                now_str = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+                equity_row = [now_str, equity, cash, buying_power]
+                logger.info(f"Logging equity row: {equity_row}")
+                log_equity(equity_row)
                 if pos_res["success"]:
                     pos_rows = [[now_str, p['symbol'], p['qty'], p['avg_entry_price'], p['current_price'], p['unrealized_pl']] for p in open_positions]
                     update_positions(pos_rows)
@@ -70,6 +72,9 @@ def main_loop():
                 breaker_active = False
 
             # 4. Iterate Watchlist
+            watchlist_updates = []
+            now_str = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
             for symbol in WATCHLIST:
                 # Get price history
                 hist_res = get_price_history(symbol, lookback_days=100)
@@ -84,6 +89,8 @@ def main_loop():
                 action = decision["action"]
                 regime = decision["regime"]
                 sleeve = decision["sleeve"]
+
+                watchlist_updates.append([symbol, regime, now_str])
 
                 latest_res = get_latest_price(symbol)
                 if not latest_res["success"]: continue
@@ -135,9 +142,13 @@ def main_loop():
                 order_id = order_res.get("order_id", "none")
                 reason = order_res.get("reason", "")
 
-                now_str = datetime.now(timezone.utc).isoformat()
-                log_row = [now_str, symbol, action, qty, current_price, order_id, status, regime, sleeve, reason]
+                trade_time_str = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+                log_row = [trade_time_str, symbol, action, qty, current_price, order_id, status, regime, sleeve, reason]
                 log_trade(log_row)
+
+            # Update watchlist tab at the end of the iteration
+            if watchlist_updates:
+                update_watchlist(watchlist_updates)
 
         except Exception as e:
             logger.error(f"Error in main loop iteration: {e}", exc_info=True)

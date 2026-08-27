@@ -51,7 +51,8 @@ def init_tabs():
     tabs_needed = {
         "Trades": ["timestamp", "symbol", "side", "qty", "price", "order_id", "status", "regime", "sleeve", "notes"],
         "Positions": ["timestamp", "symbol", "qty", "avg_entry_price", "current_price", "unrealized_pl"],
-        "Equity": ["timestamp", "equity", "cash", "buying_power"]
+        "Equity": ["timestamp", "equity", "cash", "buying_power"],
+        "Watchlist": ["symbol", "regime", "last_updated"]
     }
 
     existing_tabs = [ws.title for ws in sheet.worksheets()]
@@ -118,3 +119,23 @@ def log_equity(row):
         ws.append_row(row)
     except Exception as e:
         logger.error(f"Error logging equity to sheets: {e}")
+
+def update_watchlist(rows):
+    """
+    rows: list of lists matching Watchlist headers
+    ["symbol", "regime", "last_updated"]
+    """
+    try:
+        client = get_client()
+        if not client: return
+        sheet = get_sheet(client)
+        if not sheet: return
+
+        ws = sheet.worksheet("Watchlist")
+        ws.clear()
+
+        headers = ["symbol", "regime", "last_updated"]
+        data = [headers] + rows
+        ws.update(values=data, range_name="A1")
+    except Exception as e:
+        logger.error(f"Error updating watchlist in sheets: {e}")
