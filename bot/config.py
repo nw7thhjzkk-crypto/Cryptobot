@@ -9,6 +9,8 @@ def get_env_var(name, default=None, required=True):
     if required and val is None:
         print(f"CRITICAL ERROR: Missing required environment variable {name}", file=sys.stderr)
         sys.exit(1)
+    if isinstance(val, str):
+        val = val.strip()
     return val
 
 ALPACA_API_KEY = get_env_var("ALPACA_API_KEY")

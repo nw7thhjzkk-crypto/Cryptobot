@@ -2,8 +2,8 @@ const { google } = require('googleapis');
 
 exports.handler = async function(event, context) {
     try {
-        const credentialsStr = process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
-        const sheetId = process.env.GOOGLE_SHEET_ID;
+        const credentialsStr = process.env.GOOGLE_SERVICE_ACCOUNT_JSON ? process.env.GOOGLE_SERVICE_ACCOUNT_JSON.trim() : null;
+        const sheetId = process.env.GOOGLE_SHEET_ID ? process.env.GOOGLE_SHEET_ID.trim() : null;
 
         if (!credentialsStr || !sheetId) {
             return {
