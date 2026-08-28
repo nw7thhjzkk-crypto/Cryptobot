@@ -152,6 +152,17 @@
     </div>
 
     <script>
+        // Helper for sanitizing strings to prevent XSS
+        function escapeHTML(str) {
+            if (str === null || str === undefined) return '';
+            return String(str)
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+        }
+
         // Initialize Icons
         lucide.createIcons();
 
@@ -372,8 +383,8 @@
                 html += `
                     <div class="flex justify-between items-center border-b pb-2">
                         <div>
-                            <div class="font-bold">${pos.symbol}</div>
-                            <div class="text-xs text-gray-500">${pos.qty} shares @ $${parseFloat(pos.avg_entry_price||0).toFixed(2)}</div>
+                            <div class="font-bold">${escapeHTML(pos.symbol)}</div>
+                            <div class="text-xs text-gray-500">${escapeHTML(pos.qty)} shares @ $${parseFloat(pos.avg_entry_price||0).toFixed(2)}</div>
                         </div>
                         <div class="text-right">
                             <div class="${pnlColor} font-semibold">${pnl >= 0 ? '+' : ''}$${pnl.toFixed(2)}</div>
@@ -403,14 +414,14 @@
 
                 html += `
                     <tr class="bg-white border-b">
-                        <td class="px-4 py-2">${timeStr}</td>
-                        <td class="px-4 py-2 font-medium">${t.symbol}</td>
-                        <td class="px-4 py-2 ${sideColor} font-semibold uppercase">${t.side}</td>
-                        <td class="px-4 py-2">${t.qty}</td>
+                        <td class="px-4 py-2">${escapeHTML(timeStr)}</td>
+                        <td class="px-4 py-2 font-medium">${escapeHTML(t.symbol)}</td>
+                        <td class="px-4 py-2 ${sideColor} font-semibold uppercase">${escapeHTML(t.side)}</td>
+                        <td class="px-4 py-2">${escapeHTML(t.qty)}</td>
                         <td class="px-4 py-2">$${parseFloat(t.price||0).toFixed(2)}</td>
-                        <td class="px-4 py-2 text-xs">${t.regime}</td>
-                        <td class="px-4 py-2 text-xs">${t.sleeve}</td>
-                        <td class="px-4 py-2 ${statusColor} capitalize">${t.status}</td>
+                        <td class="px-4 py-2 text-xs">${escapeHTML(t.regime)}</td>
+                        <td class="px-4 py-2 text-xs">${escapeHTML(t.sleeve)}</td>
+                        <td class="px-4 py-2 ${statusColor} capitalize">${escapeHTML(t.status)}</td>
                     </tr>`;
             });
             tbody.innerHTML = html;
