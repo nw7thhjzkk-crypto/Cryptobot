@@ -1,6 +1,7 @@
 import json
 import logging
 import gspread
+from functools import lru_cache
 from google.oauth2.service_account import Credentials
 from bot.config import GOOGLE_SERVICE_ACCOUNT_JSON, GOOGLE_SHEET_ID
 
@@ -11,6 +12,7 @@ SCOPES = [
     "https://www.googleapis.com/auth/drive"
 ]
 
+@lru_cache(maxsize=1)
 def get_client():
     raw_json = GOOGLE_SERVICE_ACCOUNT_JSON
     if raw_json is None:
