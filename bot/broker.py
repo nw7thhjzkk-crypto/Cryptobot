@@ -18,15 +18,21 @@ logger.info(f"Initializing Alpaca TradingClient. PAPER_MODE={PAPER_MODE}, Base U
 trading_client = TradingClient(ALPACA_API_KEY, ALPACA_SECRET_KEY, paper=PAPER_MODE)
 data_client = StockHistoricalDataClient(ALPACA_API_KEY, ALPACA_SECRET_KEY)
 
-def get_latest_price(symbol):
+def get_latest_prices(symbols):
     try:
-        # Get the latest trade
+        # Get the latest trades for multiple symbols
         from alpaca.data.requests import StockLatestTradeRequest
-        req = StockLatestTradeRequest(symbol_or_symbols=[symbol])
+        req = StockLatestTradeRequest(symbol_or_symbols=symbols)
         res = data_client.get_stock_latest_trade(req)
-        return {"success": True, "price": res[symbol].price}
+
+        prices = {}
+        for symbol in symbols:
+            if symbol in res:
+                prices[symbol] = res[symbol].price
+
+        return {"success": True, "prices": prices}
     except Exception as e:
-        logger.error(f"Error fetching latest price for {symbol}: {e}")
+        logger.error(f"Error fetching latest prices for {symbols}: {e}")
         return {"success": False, "reason": str(e)}
 
 def get_price_history(symbol, lookback_days=100):
