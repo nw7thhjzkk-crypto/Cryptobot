@@ -1,5 +1,6 @@
 import json
 import logging
+import functools
 import gspread
 from google.oauth2.service_account import Credentials
 from bot.config import GOOGLE_SERVICE_ACCOUNT_JSON, GOOGLE_SHEET_ID
@@ -42,11 +43,22 @@ def get_sheet(client):
         logger.error(f"Error opening Google Sheet {GOOGLE_SHEET_ID}: {e}")
         return None
 
-def init_tabs():
-    client = get_client()
-    if not client: return
-    sheet = get_sheet(client)
-    if not sheet: return
+
+def with_sheet(func):
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        try:
+            client = get_client()
+            if not client: return
+            sheet = get_sheet(client)
+            if not sheet: return
+            return func(sheet, *args, **kwargs)
+        except Exception as e:
+            logger.error(f"Error in {func.__name__}: {e}")
+    return wrapper
+
+@with_sheet
+def init_tabs(sheet):
 
     tabs_needed = {
         "Trades": ["timestamp", "symbol", "side", "qty", "price", "order_id", "status", "regime", "sleeve", "notes"],
@@ -67,75 +79,47 @@ def init_tabs():
             if not ws.row_values(1):
                 ws.append_row(headers)
 
-def log_trade(row):
+@with_sheet
+def log_trade(sheet, row):
     """
     row: list matching the Trades headers
     ["timestamp", "symbol", "side", "qty", "price", "order_id", "status", "regime", "sleeve", "notes"]
     """
-    try:
-        client = get_client()
-        if not client: return
-        sheet = get_sheet(client)
-        if not sheet: return
+    ws = sheet.worksheet("Trades")
+    ws.append_row(row)
 
-        ws = sheet.worksheet("Trades")
-        ws.append_row(row)
-    except Exception as e:
-        logger.error(f"Error logging trade to sheets: {e}")
-
-def update_positions(rows):
+@with_sheet
+def update_positions(sheet, rows):
     """
     rows: list of lists matching Positions headers
     ["timestamp", "symbol", "qty", "avg_entry_price", "current_price", "unrealized_pl"]
     """
-    try:
-        client = get_client()
-        if not client: return
-        sheet = get_sheet(client)
-        if not sheet: return
+    ws = sheet.worksheet("Positions")
+    # Clear old positions (except header)
+    ws.clear()
 
-        ws = sheet.worksheet("Positions")
-        # Clear old positions (except header)
-        ws.clear()
+    headers = ["timestamp", "symbol", "qty", "avg_entry_price", "current_price", "unrealized_pl"]
+    data = [headers] + rows
+    ws.update(values=data, range_name="A1")
 
-        headers = ["timestamp", "symbol", "qty", "avg_entry_price", "current_price", "unrealized_pl"]
-        data = [headers] + rows
-        ws.update(values=data, range_name="A1")
-    except Exception as e:
-        logger.error(f"Error updating positions in sheets: {e}")
-
-def log_equity(row):
+@with_sheet
+def log_equity(sheet, row):
     """
     row: list matching the Equity headers
     ["timestamp", "equity", "cash", "buying_power"]
     """
-    try:
-        client = get_client()
-        if not client: return
-        sheet = get_sheet(client)
-        if not sheet: return
+    ws = sheet.worksheet("Equity")
+    ws.append_row(row)
 
-        ws = sheet.worksheet("Equity")
-        ws.append_row(row)
-    except Exception as e:
-        logger.error(f"Error logging equity to sheets: {e}")
-
-def update_watchlist(rows):
+@with_sheet
+def update_watchlist(sheet, rows):
     """
     rows: list of lists matching Watchlist headers
     ["symbol", "regime", "last_updated"]
     """
-    try:
-        client = get_client()
-        if not client: return
-        sheet = get_sheet(client)
-        if not sheet: return
+    ws = sheet.worksheet("Watchlist")
+    ws.clear()
 
-        ws = sheet.worksheet("Watchlist")
-        ws.clear()
-
-        headers = ["symbol", "regime", "last_updated"]
-        data = [headers] + rows
-        ws.update(values=data, range_name="A1")
-    except Exception as e:
-        logger.error(f"Error updating watchlist in sheets: {e}")
+    headers = ["symbol", "regime", "last_updated"]
+    data = [headers] + rows
+    ws.update(values=data, range_name="A1")
