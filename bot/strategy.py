@@ -62,7 +62,7 @@ def calculate_macd(df: pd.DataFrame, fast: int = 12, slow: int = 26, signal: int
     macd_hist = macd_line - signal_line
     return macd_hist
 
-def detect_regime(price_history: pd.DataFrame) -> str:
+def detect_regime(price_history: pd.DataFrame) -> tuple[str, float]:
     """
     Detects the current market regime.
     - ADX(14) > 25 -> "trending"
@@ -70,43 +70,45 @@ def detect_regime(price_history: pd.DataFrame) -> str:
       relative to its own 50-day average -> "ranging"
     - ATR(14) > 1.5x its 50-day average -> "transitional" (overrides above)
     - Default -> "transitional"
+
+    Returns a tuple of (regime, current_atr).
     """
     if len(price_history) < 65:
-        return "transitional"
+        return "transitional", 0.0
 
     df = price_history.copy()
-
-    # Calculate ADX (14)
-    adx = calculate_adx(df, length=14)
-    if adx is None or adx.empty or pd.isna(adx.iloc[-1]):
-        return "transitional"
-    current_adx = adx.iloc[-1]
 
     # Calculate ATR (14)
     atr = calculate_atr(df, length=14)
     if atr is None or atr.empty or pd.isna(atr.iloc[-1]):
-         return "transitional"
+         return "transitional", 0.0
     current_atr = atr.iloc[-1]
     atr_50_avg = atr.rolling(window=50).mean().iloc[-1]
 
+    # Calculate ADX (14)
+    adx = calculate_adx(df, length=14)
+    if adx is None or adx.empty or pd.isna(adx.iloc[-1]):
+        return "transitional", current_atr
+    current_adx = adx.iloc[-1]
+
     # Check ATR override
     if current_atr > 1.5 * atr_50_avg:
-        return "transitional"
+        return "transitional", current_atr
 
     # Calculate Bollinger Bands (20)
     lower_band, mid_band, upper_band, bb_width = calculate_bbands(df, length=20)
     if bb_width is None or bb_width.empty or pd.isna(bb_width.iloc[-1]):
-         return "transitional"
+         return "transitional", current_atr
 
     current_bb_width = bb_width.iloc[-1]
     bb_width_50_avg = bb_width.rolling(window=50).mean().iloc[-1]
 
     if current_adx > 25:
-        return "trending"
+        return "trending", current_atr
     elif current_adx < 20 and current_bb_width < bb_width_50_avg:
-        return "ranging"
+        return "ranging", current_atr
 
-    return "transitional"
+    return "transitional", current_atr
 
 def trend_signal(price_history: pd.DataFrame) -> str:
     """
@@ -184,9 +186,9 @@ def decide(symbol: str, price_history: pd.DataFrame) -> dict:
     Calls detect_regime(), routes to the appropriate sleeve, returns dict.
     """
     if price_history.empty:
-        return {"action": "hold", "regime": "unknown", "sleeve": "none"}
+        return {"action": "hold", "regime": "unknown", "sleeve": "none", "atr": 0.0}
 
-    regime = detect_regime(price_history)
+    regime, atr = detect_regime(price_history)
 
     action = "hold"
     sleeve = "none"
@@ -201,5 +203,6 @@ def decide(symbol: str, price_history: pd.DataFrame) -> dict:
     return {
         "action": action,
         "regime": regime,
-        "sleeve": sleeve
+        "sleeve": sleeve,
+        "atr": atr
     }
