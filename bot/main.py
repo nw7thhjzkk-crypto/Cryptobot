@@ -74,6 +74,7 @@ def main_loop():
             # 4. Iterate Watchlist
             watchlist_updates = []
             now_str = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+            open_positions_dict = {p['symbol']: p for p in open_positions}
 
             for symbol in WATCHLIST:
                 # Get price history
@@ -87,7 +88,7 @@ def main_loop():
                 logger.info(f"Fetched {num_bars} bars for {symbol}")
 
                 # Check for existing position
-                existing_pos = next((p for p in open_positions if p['symbol'] == symbol), None)
+                existing_pos = open_positions_dict.get(symbol)
 
                 decision = decide(symbol, df)
                 action = decision["action"]
