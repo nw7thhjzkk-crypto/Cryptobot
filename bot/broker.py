@@ -29,12 +29,12 @@ def get_latest_price(symbol):
         logger.error(f"Error fetching latest price for {symbol}: {e}")
         return {"success": False, "reason": str(e)}
 
-def get_price_history(symbol, lookback_days=100):
+def get_price_history(symbols, lookback_days=100):
     try:
         end = datetime.now()
         start = end - timedelta(days=lookback_days)
         req = StockBarsRequest(
-            symbol_or_symbols=[symbol],
+            symbol_or_symbols=symbols,
             timeframe=TimeFrame.Day,
             start=start,
             end=end
@@ -42,7 +42,7 @@ def get_price_history(symbol, lookback_days=100):
         bars = data_client.get_stock_bars(req)
         return {"success": True, "data": bars.df}
     except Exception as e:
-        logger.error(f"Error fetching price history for {symbol}: {e}")
+        logger.error(f"Error fetching price history for {symbols}: {e}")
         return {"success": False, "reason": str(e)}
 
 def submit_market_order(symbol, qty, side):
