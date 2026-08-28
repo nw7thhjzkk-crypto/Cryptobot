@@ -75,13 +75,21 @@ def main_loop():
             watchlist_updates = []
             now_str = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
+            # Get price history for the entire watchlist
+            hist_res = get_price_history(WATCHLIST, lookback_days=100)
+            if not hist_res["success"]:
+                logger.error(f"Failed to fetch batch price history: {hist_res.get('reason')}")
+                time.sleep(POLL_INTERVAL_SECONDS)
+                continue
+
+            batch_df = hist_res.get("data")
+
             for symbol in WATCHLIST:
-                # Get price history
-                hist_res = get_price_history(symbol, lookback_days=100)
-                if not hist_res["success"]:
-                    logger.warning(f"Failed to fetch price history for {symbol}")
+                if batch_df is not None and symbol in batch_df.index.get_level_values(0):
+                    df = batch_df.loc[symbol]
+                else:
+                    logger.warning(f"No price history found for {symbol} in batch response")
                     continue
-                df = hist_res["data"]
 
                 num_bars = len(df) if df is not None else 0
                 logger.info(f"Fetched {num_bars} bars for {symbol}")
