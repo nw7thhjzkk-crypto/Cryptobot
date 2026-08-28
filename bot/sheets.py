@@ -23,10 +23,7 @@ def get_client():
     try:
         creds_dict = json.loads(raw_json)
     except Exception as e:
-        safe_str = raw_json
-        if len(safe_str) > 40:
-            safe_str = f"{safe_str[:20]}...{safe_str[-20:]}"
-        raise ValueError(f"Error parsing GOOGLE_SERVICE_ACCOUNT_JSON: {e}. String preview: {safe_str}") from e
+        raise ValueError(f"Error parsing GOOGLE_SERVICE_ACCOUNT_JSON: {e}") from e
 
     try:
         creds = Credentials.from_service_account_info(creds_dict, scopes=SCOPES)
