@@ -7,7 +7,7 @@ from bot.config import (
     RISK_PER_TRADE_PCT, MAX_TOTAL_RISK_PCT, MAX_DRAWDOWN_PCT
 )
 from bot.broker import (
-    get_latest_price, get_price_history, submit_market_order,
+    get_latest_prices, get_price_history, submit_market_order,
     get_account, get_positions
 )
 from bot.sheets import init_tabs, log_trade, update_positions, log_equity, update_watchlist
@@ -71,7 +71,11 @@ def main_loop():
             else:
                 breaker_active = False
 
-            # 4. Iterate Watchlist
+            # 4. Fetch Latest Prices for Watchlist
+            latest_prices_res = get_latest_prices(WATCHLIST)
+            latest_prices = latest_prices_res.get("prices", {}) if latest_prices_res["success"] else {}
+
+            # 5. Iterate Watchlist
             watchlist_updates = []
             now_str = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
@@ -98,9 +102,10 @@ def main_loop():
 
                 watchlist_updates.append([symbol, regime, now_str])
 
-                latest_res = get_latest_price(symbol)
-                if not latest_res["success"]: continue
-                current_price = latest_res["price"]
+                if symbol not in latest_prices:
+                    logger.warning(f"Failed to fetch latest price for {symbol}")
+                    continue
+                current_price = latest_prices[symbol]
 
                 # Exit logic for mean-reversion if already in position
                 if existing_pos and existing_pos["qty"] > 0 and regime == "ranging" and sleeve == "mean_reversion":
