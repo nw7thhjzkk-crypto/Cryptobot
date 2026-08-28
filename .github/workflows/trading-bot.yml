@@ -5,6 +5,10 @@ on:
     - cron: '0 */6 * * *' # Every 6 hours (approx to loop limits)
   workflow_dispatch: # Allows manual trigger
 
+concurrency:
+  group: trading-bot
+  cancel-in-progress: false
+
 jobs:
   run-bot:
     runs-on: ubuntu-latest
