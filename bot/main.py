@@ -93,6 +93,7 @@ def main_loop():
                 action = decision["action"]
                 regime = decision["regime"]
                 sleeve = decision["sleeve"]
+                atr = decision.get("atr", 0.0)
 
                 logger.info(f"Symbol: {symbol} | Regime: {regime} | Sleeve: {sleeve} | Action: {action}")
 
@@ -122,9 +123,6 @@ def main_loop():
 
                 # Calculate size and risk for new buy
                 if action == "buy":
-                    atr_s = calculate_atr(df, length=14)
-                    atr = atr_s.iloc[-1] if (atr_s is not None and not atr_s.empty) else 0
-
                     qty = calculate_position_size(equity, atr, RISK_PER_TRADE_PCT)
                     if qty <= 0:
                         logger.info(f"Calculated size for {symbol} is 0, skipping.")
