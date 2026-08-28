@@ -1,5 +1,4 @@
 import math
-import pandas as pd
 
 def calculate_position_size(account_equity: float, atr: float, risk_per_trade_pct: float, stop_multiple: float = 2.0) -> int:
     """
