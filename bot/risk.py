@@ -12,16 +12,6 @@ def calculate_position_size(account_equity: float, atr: float, risk_per_trade_pc
     shares = math.floor(risk_amount / risk_per_share)
     return shares
 
-def calculate_stop_price(entry_price: float, atr: float, side: str, stop_multiple: float = 2.0) -> float:
-    """
-    Returns the stop-loss price, stop_multiple * atr away from entry
-    in the adverse direction.
-    """
-    if side.lower() == 'buy':
-        return entry_price - (stop_multiple * atr)
-    else:
-        return entry_price + (stop_multiple * atr)
-
 def check_portfolio_risk(open_positions: list, new_position_risk: float, max_total_risk_pct: float, account_equity: float) -> bool:
     """
     Sums risk already committed across open_positions plus the new
