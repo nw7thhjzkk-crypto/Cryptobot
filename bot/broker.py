@@ -66,13 +66,6 @@ def get_account():
         actual_url = trading_client._base_url if hasattr(trading_client, '_base_url') else "Unknown"
         logger.info(f"Using Alpaca base URL: {actual_url}")
 
-        key_str = str(ALPACA_API_KEY) if ALPACA_API_KEY else ""
-        key_preview = key_str[:4] if len(key_str) >= 4 else "None"
-        logger.info(f"API Key starts with: {key_preview}, length: {len(key_str)}")
-
-        headers = trading_client._get_auth_headers() if hasattr(trading_client, '_get_auth_headers') else {}
-        logger.info(f"Request Headers keys: {list(headers.keys())}")
-
         acct = trading_client.get_account()
         return {
             "success": True,
