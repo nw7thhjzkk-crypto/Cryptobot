@@ -63,3 +63,40 @@ def check_drawdown_breaker(equity_history: list, max_drawdown_pct: float, window
 
     drawdown = (peak - current) / peak if peak > 0 else 0
     return drawdown > max_drawdown_pct
+
+import logging
+from typing import Dict, Any, List
+
+logger = logging.getLogger(__name__)
+
+class RiskEngine:
+    def __init__(self, paper_mode: bool, max_position_pct: float):
+        self.paper_mode = paper_mode
+        self.max_position_pct = max_position_pct
+
+    def evaluate_order(self, symbol: str, signal: str, qty: int, price: float, equity: float, buying_power: float) -> Dict[str, Any]:
+        if signal == "HOLD":
+             return {"approved": False, "reason": "Signal is HOLD"}
+
+        if qty <= 0:
+             return {"approved": False, "reason": "Quantity is zero or negative"}
+
+        if equity <= 0:
+             return {"approved": False, "reason": "Account equity is zero or negative"}
+
+        if price <= 0 or math.isnan(price) or math.isinf(price):
+             return {"approved": False, "reason": "Invalid price data"}
+
+        if not self.paper_mode:
+            logger.warning("LIVE TRADING MODE DETECTED. Proceeding with extreme caution.")
+
+        position_value = qty * price
+
+        max_allowed_value = equity * self.max_position_pct
+        if position_value > max_allowed_value:
+             return {"approved": False, "reason": f"Position value ({position_value}) exceeds max allowed ({max_allowed_value})"}
+
+        if signal == "BUY" and position_value > buying_power:
+             return {"approved": False, "reason": f"Insufficient buying power (Needs {position_value}, has {buying_power})"}
+
+        return {"approved": True, "reason": "Risk checks passed"}
