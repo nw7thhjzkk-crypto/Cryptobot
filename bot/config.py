@@ -28,3 +28,12 @@ LOOP_MAX_MINUTES = int(get_env_var("LOOP_MAX_MINUTES", "350"))
 RISK_PER_TRADE_PCT = float(get_env_var("RISK_PER_TRADE_PCT", "0.01"))
 MAX_TOTAL_RISK_PCT = float(get_env_var("MAX_TOTAL_RISK_PCT", "0.06"))
 MAX_DRAWDOWN_PCT = float(get_env_var("MAX_DRAWDOWN_PCT", "0.10"))
+
+GEMINI_API_KEY = get_env_var("GEMINI_API_KEY", required=False)
+GEMINI_MODEL = get_env_var("GEMINI_MODEL", default="gemini-2.5-flash", required=False)
+
+MIN_SIGNAL_CONFIDENCE = float(get_env_var("MIN_SIGNAL_CONFIDENCE", "0.5"))
+MAX_POSITION_PCT = float(get_env_var("MAX_POSITION_PCT", "0.20"))
+MAX_PORTFOLIO_EXPOSURE = float(get_env_var("MAX_PORTFOLIO_EXPOSURE", "0.80"))
+MAX_POSITIONS = int(get_env_var("MAX_POSITIONS", "10"))
+COOLDOWN_MINUTES = int(get_env_var("COOLDOWN_MINUTES", "1440")) # 1 day

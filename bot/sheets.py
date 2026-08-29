@@ -49,6 +49,8 @@ def init_tabs():
     if not sheet: return
 
     tabs_needed = {
+        "AgentSignals": ["timestamp", "symbol", "agent", "signal", "score", "confidence", "reason", "regime", "consensus", "risk_decision", "final_decision"],
+        "BotRuns": ["run_id", "started_at", "finished_at", "status", "symbols_processed", "orders_submitted", "errors"],
         "Trades": ["timestamp", "symbol", "side", "qty", "price", "order_id", "status", "regime", "sleeve", "notes"],
         "Positions": ["timestamp", "symbol", "qty", "avg_entry_price", "current_price", "unrealized_pl"],
         "Equity": ["timestamp", "equity", "cash", "buying_power"],
@@ -139,3 +141,27 @@ def update_watchlist(rows):
         ws.update(values=data, range_name="A1")
     except Exception as e:
         logger.error(f"Error updating watchlist in sheets: {e}")
+
+def log_agent_signal(row_data):
+    try:
+        client = get_client()
+        if not client: return
+        sheet = get_sheet(client)
+        if not sheet: return
+
+        ws = sheet.worksheet("AgentSignals")
+        ws.append_row(row_data)
+    except Exception as e:
+        logger.error(f"Error logging agent signal to sheets: {e}")
+
+def log_bot_run(row_data):
+    try:
+        client = get_client()
+        if not client: return
+        sheet = get_sheet(client)
+        if not sheet: return
+
+        ws = sheet.worksheet("BotRuns")
+        ws.append_row(row_data)
+    except Exception as e:
+        logger.error(f"Error logging bot run to sheets: {e}")
