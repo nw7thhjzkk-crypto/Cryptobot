@@ -61,19 +61,48 @@ def init_tabs():
 
     for title, headers in tabs_needed.items():
         if title not in existing_tabs:
-            ws = sheet.add_worksheet(title=title, rows=1000, cols=len(headers))
+            ws = sheet.add_worksheet(title=title, rows=2000, cols=len(headers))
             ws.append_row(headers)
         else:
-            # Check if headers exist, if not add them
             ws = sheet.worksheet(title)
             if not ws.row_values(1):
                 ws.append_row(headers)
 
+def load_recent_equity(max_rows: int = 100) -> list:
+    """
+    Load the most recent equity values from the Equity tab.
+    Used so drawdown breaker works across multiple GitHub Actions runs.
+    Returns a list of floats (equity values), oldest → newest.
+    """
+    try:
+        client = get_client()
+        if not client:
+            return []
+        sheet = get_sheet(client)
+        if not sheet:
+            return []
+
+        ws = sheet.worksheet("Equity")
+        records = ws.get_all_records()
+        if not records:
+            return []
+
+        # Take the last max_rows
+        recent = records[-max_rows:]
+        equities = []
+        for r in recent:
+            try:
+                eq = float(r.get("equity", 0))
+                if eq > 0:
+                    equities.append(eq)
+            except (TypeError, ValueError):
+                continue
+        return equities
+    except Exception as e:
+        logger.warning(f"Could not load recent equity history: {e}")
+        return []
+
 def log_trade(row):
-    """
-    row: list matching the Trades headers
-    ["timestamp", "symbol", "side", "qty", "price", "order_id", "status", "regime", "sleeve", "notes"]
-    """
     try:
         client = get_client()
         if not client: return
@@ -86,10 +115,6 @@ def log_trade(row):
         logger.error(f"Error logging trade to sheets: {e}")
 
 def update_positions(rows):
-    """
-    rows: list of lists matching Positions headers
-    ["timestamp", "symbol", "qty", "avg_entry_price", "current_price", "unrealized_pl"]
-    """
     try:
         client = get_client()
         if not client: return
@@ -97,7 +122,6 @@ def update_positions(rows):
         if not sheet: return
 
         ws = sheet.worksheet("Positions")
-        # Clear old positions (except header)
         ws.clear()
 
         headers = ["timestamp", "symbol", "qty", "avg_entry_price", "current_price", "unrealized_pl"]
@@ -107,10 +131,6 @@ def update_positions(rows):
         logger.error(f"Error updating positions in sheets: {e}")
 
 def log_equity(row):
-    """
-    row: list matching the Equity headers
-    ["timestamp", "equity", "cash", "buying_power"]
-    """
     try:
         client = get_client()
         if not client: return
@@ -123,10 +143,6 @@ def log_equity(row):
         logger.error(f"Error logging equity to sheets: {e}")
 
 def update_watchlist(rows):
-    """
-    rows: list of lists matching Watchlist headers
-    ["symbol", "regime", "last_updated"]
-    """
     try:
         client = get_client()
         if not client: return
