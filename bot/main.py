@@ -15,7 +15,7 @@ from bot.broker import (
 )
 from bot.sheets import (
     init_tabs, log_trade, update_positions, log_equity,
-    update_watchlist, log_agent_signal, log_bot_run
+    update_watchlist, log_agent_signal, log_bot_run, load_recent_equity
 )
 
 from bot.agents.trend import TrendAgent
@@ -37,11 +37,15 @@ from bot.strategy import calculate_atr
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-equity_history_run = []
-
 def main_loop():
     logger.info("Initializing Google Sheets tabs...")
     init_tabs()
+
+    # === Continuous design ===
+    # Load recent equity history from previous runs so drawdown breaker
+    # works across the 6-hour GitHub Actions boundary.
+    equity_history = load_recent_equity(max_rows=120)
+    logger.info(f"Loaded {len(equity_history)} previous equity points from Sheets for continuous state")
 
     run_id = str(uuid.uuid4())[:8]
     run_started_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -67,10 +71,12 @@ def main_loop():
     total_orders_submitted = 0
     total_errors = 0
 
+    logger.info(f"Starting continuous paper trading loop (max {LOOP_MAX_MINUTES} min)")
+
     while True:
         elapsed = time.time() - start_time
         if elapsed > max_seconds:
-            logger.info("Time budget reached. Exiting cleanly.")
+            logger.info("Time budget reached. Exiting cleanly so next scheduled run can continue.")
             break
 
         try:
@@ -87,22 +93,29 @@ def main_loop():
             equity = acct_res["equity"]
             cash = acct_res["cash"]
             buying_power = acct_res["buying_power"]
-            equity_history_run.append(equity)
+            equity_history.append(equity)
+
+            # Keep equity history from growing forever in memory
+            if len(equity_history) > 200:
+                equity_history = equity_history[-150:]
 
             pos_res = get_positions()
             open_positions = pos_res.get("positions", []) if pos_res["success"] else []
 
-            if iteration % 10 == 1:
+            # Persist equity + positions periodically (and always on first iteration)
+            if iteration == 1 or iteration % 8 == 0:
                 now_str = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-                equity_row = [now_str, equity, cash, buying_power]
-                log_equity(equity_row)
+                log_equity([now_str, equity, cash, buying_power])
                 if pos_res["success"]:
-                    pos_rows = [[now_str, p['symbol'], p['qty'], p['avg_entry_price'], p['current_price'], p['unrealized_pl']] for p in open_positions]
+                    pos_rows = [
+                        [now_str, p['symbol'], p['qty'], p['avg_entry_price'], p['current_price'], p['unrealized_pl']]
+                        for p in open_positions
+                    ]
                     update_positions(pos_rows)
 
-            breaker_active = check_drawdown_breaker(equity_history_run, MAX_DRAWDOWN_PCT)
+            breaker_active = check_drawdown_breaker(equity_history, MAX_DRAWDOWN_PCT)
             if breaker_active:
-                logger.warning("Drawdown breaker active. Halting new entries.")
+                logger.warning("Drawdown breaker active. Halting new entries this iteration.")
 
             bench_res = get_price_history("SPY", lookback_days=250)
             benchmark_df = bench_res["data"] if bench_res["success"] else None
@@ -120,8 +133,7 @@ def main_loop():
                         continue
 
                     df = hist_res["data"]
-                    num_bars = len(df)
-                    logger.info(f"Fetched {num_bars} bars for {symbol}")
+                    logger.info(f"Fetched {len(df)} bars for {symbol}")
 
                     latest_res = get_latest_price(symbol)
                     if not latest_res["success"]:
@@ -141,56 +153,66 @@ def main_loop():
 
                     gemini_signal = gemini_agent.analyze(symbol, df, quant_signals=quant_signals)
 
-                    consensus_result = consensus_engine.aggregate_signals(symbol, quant_signals, regime_signal, gemini_signal)
+                    consensus_result = consensus_engine.aggregate_signals(
+                        symbol, quant_signals, regime_signal, gemini_signal
+                    )
                     proposed_signal = consensus_result["signal"]
 
-                    logger.info(f"Consensus for {symbol}: {proposed_signal} (Score: {consensus_result['score']:.2f}, Conf: {consensus_result['confidence']:.2f})")
+                    logger.info(
+                        f"Consensus for {symbol}: {proposed_signal} "
+                        f"(Score: {consensus_result['score']:.2f}, Conf: {consensus_result['confidence']:.2f})"
+                    )
 
                     log_agent_signal([
-                        now_str, symbol, "Consensus", proposed_signal, consensus_result['score'],
-                        consensus_result['confidence'], consensus_result['reason'], regime_str,
+                        now_str, symbol, "Consensus", proposed_signal,
+                        consensus_result['score'], consensus_result['confidence'],
+                        consensus_result['reason'], regime_str,
                         proposed_signal, "", ""
                     ])
 
                     watchlist_updates.append([symbol, regime_str, now_str])
 
                     if proposed_signal == "HOLD":
-                        logger.info(f"Symbol: {symbol} | Regime: {regime_str} | Sleeve: none | Action: hold")
                         continue
 
                     if proposed_signal == "BUY" and breaker_active:
-                         logger.info(f"Skipping buy for {symbol} due to drawdown breaker.")
-                         continue
+                        logger.info(f"Skipping BUY for {symbol} due to drawdown breaker")
+                        continue
 
-                    portfolio_eval = portfolio_engine.evaluate(symbol, proposed_signal, open_positions, current_price, equity)
+                    portfolio_eval = portfolio_engine.evaluate(
+                        symbol, proposed_signal, open_positions, current_price, equity
+                    )
                     if not portfolio_eval["approved"]:
                         logger.info(f"Portfolio rejected {proposed_signal} for {symbol}: {portfolio_eval['reason']}")
                         continue
 
                     if proposed_signal == "BUY":
                         atr_s = calculate_atr(df, length=14)
-                        atr = atr_s.iloc[-1] if (atr_s is not None and not atr_s.empty) else (current_price * 0.05)
+                        atr = float(atr_s.iloc[-1]) if (atr_s is not None and not atr_s.empty) else (current_price * 0.05)
 
                         qty = calculate_position_size(equity, atr, RISK_PER_TRADE_PCT)
                         if qty <= 0:
-                            logger.info(f"Calculated size for {symbol} is 0, skipping.")
                             continue
 
                         new_risk = qty * (2.0 * atr)
                         if not check_portfolio_risk(open_positions, new_risk, MAX_TOTAL_RISK_PCT, equity):
-                            logger.info(f"Portfolio total risk exceeded, skipping buy for {symbol}.")
+                            logger.info(f"Portfolio total risk exceeded, skipping buy for {symbol}")
                             continue
-                    else: # SELL
+                    else:  # SELL
                         existing_pos = next((p for p in open_positions if p['symbol'] == symbol), None)
                         qty = existing_pos["qty"] if existing_pos else 0
+                        if qty <= 0:
+                            continue
 
-                    risk_eval = risk_engine.evaluate_order(symbol, proposed_signal, qty, current_price, equity, buying_power)
+                    risk_eval = risk_engine.evaluate_order(
+                        symbol, proposed_signal, qty, current_price, equity, buying_power
+                    )
 
                     if not risk_eval["approved"]:
-                         logger.warning(f"Risk rejected {proposed_signal} for {symbol}: {risk_eval['reason']}")
-                         continue
+                        logger.warning(f"Risk rejected {proposed_signal} for {symbol}: {risk_eval['reason']}")
+                        continue
 
-                    logger.info(f"Symbol: {symbol} | Regime: {regime_str} | Sleeve: multi-agent | Action: {proposed_signal}")
+                    logger.info(f"Symbol: {symbol} | Regime: {regime_str} | Action: {proposed_signal} | Qty: {qty}")
 
                     order_res = execution_engine.execute_order(symbol, proposed_signal, qty)
                     total_orders_submitted += 1
@@ -199,11 +221,14 @@ def main_loop():
                     order_id = order_res.get("order_id", "none")
                     reason = order_res.get("reason", "")
 
-                    log_trade([now_str, symbol, proposed_signal, qty, current_price, order_id, status, regime_str, "multi-agent", reason])
+                    log_trade([
+                        now_str, symbol, proposed_signal, qty, current_price,
+                        order_id, status, regime_str, "multi-agent", reason
+                    ])
 
                 except Exception as inner_e:
-                     logger.error(f"Error processing symbol {symbol}: {inner_e}", exc_info=True)
-                     total_errors += 1
+                    logger.error(f"Error processing {symbol}: {inner_e}", exc_info=True)
+                    total_errors += 1
 
             if watchlist_updates:
                 update_watchlist(watchlist_updates)
@@ -214,9 +239,29 @@ def main_loop():
 
         time.sleep(POLL_INTERVAL_SECONDS)
 
+    # Final equity + positions snapshot before exit
+    try:
+        acct = get_account()
+        if acct["success"]:
+            now_str = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+            log_equity([now_str, acct["equity"], acct["cash"], acct["buying_power"]])
+            pos = get_positions()
+            if pos["success"]:
+                pos_rows = [
+                    [now_str, p['symbol'], p['qty'], p['avg_entry_price'], p['current_price'], p['unrealized_pl']]
+                    for p in pos.get("positions", [])
+                ]
+                update_positions(pos_rows)
+    except Exception:
+        pass
+
     run_finished_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-    log_bot_run([run_id, run_started_at, run_finished_at, "completed", total_symbols_processed, total_orders_submitted, total_errors])
+    log_bot_run([
+        run_id, run_started_at, run_finished_at, "completed",
+        total_symbols_processed, total_orders_submitted, total_errors
+    ])
+    logger.info(f"Run {run_id} finished cleanly. Next scheduled run will continue from current state.")
 
 if __name__ == "__main__":
-    logger.info("Starting Multi-Agent Paper Trading Bot")
+    logger.info("Starting Multi-Agent Paper Trading Bot (Continuous Design)")
     main_loop()
