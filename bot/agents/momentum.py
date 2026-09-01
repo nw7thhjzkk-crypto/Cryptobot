@@ -8,44 +8,47 @@ class MomentumAgent(BaseAgent):
         super().__init__("MomentumAgent")
 
     def analyze(self, symbol: str, price_history: pd.DataFrame, **kwargs) -> Dict[str, Any]:
-        if len(price_history) < 20:
+        if len(price_history) < 25:
             return self._create_hold_signal(symbol, "Insufficient data for momentum analysis")
 
         df = price_history.copy()
         rsi = calculate_rsi(df, length=14)
 
         roc_period = 10
-        if len(df) > roc_period:
-            roc = ((df['close'] - df['close'].shift(roc_period)) / df['close'].shift(roc_period)) * 100
-        else:
-            roc = pd.Series([0.0]*len(df))
+        roc = ((df['close'] - df['close'].shift(roc_period)) / df['close'].shift(roc_period)) * 100
 
         if rsi is None or rsi.empty or roc.empty:
             return self._create_hold_signal(symbol, "Failed to calculate indicators")
 
-        curr_rsi = rsi.iloc[-1]
-        curr_roc = roc.iloc[-1]
+        curr_rsi = float(rsi.iloc[-1])
+        curr_roc = float(roc.iloc[-1])
+        prev_roc = float(roc.iloc[-2]) if len(roc) > 1 else 0.0
 
         signal = "HOLD"
         confidence = 0.0
         reason = "Neutral momentum"
 
-        if curr_rsi > 70 and curr_roc < 0:
-            signal = "SELL"
-            confidence = min(0.5 + (curr_rsi - 70) / 30.0, 0.9)
-            reason = "Overbought RSI with negative momentum (ROC)"
-        elif curr_rsi < 30 and curr_roc > 0:
+        # Strong momentum continuation
+        if curr_rsi > 55 and curr_roc > 3.0 and curr_roc > prev_roc:
             signal = "BUY"
-            confidence = min(0.5 + (30 - curr_rsi) / 30.0, 0.9)
-            reason = "Oversold RSI with positive momentum (ROC)"
-        elif curr_rsi > 50 and curr_roc > 2.0:
-            signal = "BUY"
-            confidence = min(0.4 + (curr_roc / 10.0), 0.8)
-            reason = "Positive momentum in bullish RSI zone"
-        elif curr_rsi < 50 and curr_roc < -2.0:
+            confidence = min(0.45 + (curr_roc / 12.0) + (curr_rsi - 50) / 40.0, 0.88)
+            reason = f"Positive momentum acceleration (ROC {curr_roc:.1f}%, RSI {curr_rsi:.1f})"
+
+        elif curr_rsi < 45 and curr_roc < -3.0 and curr_roc < prev_roc:
             signal = "SELL"
-            confidence = min(0.4 + (abs(curr_roc) / 10.0), 0.8)
-            reason = "Negative momentum in bearish RSI zone"
+            confidence = min(0.45 + (abs(curr_roc) / 12.0) + (50 - curr_rsi) / 40.0, 0.88)
+            reason = f"Negative momentum acceleration (ROC {curr_roc:.1f}%, RSI {curr_rsi:.1f})"
+
+        # Extreme mean-reversion style momentum fade
+        elif curr_rsi > 75 and curr_roc < 0:
+            signal = "SELL"
+            confidence = min(0.5 + (curr_rsi - 75) / 25.0, 0.85)
+            reason = f"Overbought RSI with fading momentum (RSI {curr_rsi:.1f})"
+
+        elif curr_rsi < 25 and curr_roc > 0:
+            signal = "BUY"
+            confidence = min(0.5 + (25 - curr_rsi) / 25.0, 0.85)
+            reason = f"Oversold RSI with improving momentum (RSI {curr_rsi:.1f})"
 
         score = confidence if signal == "BUY" else (-confidence if signal == "SELL" else 0.0)
 
@@ -53,11 +56,11 @@ class MomentumAgent(BaseAgent):
             "agent": self.name,
             "symbol": symbol,
             "signal": signal,
-            "score": score,
-            "confidence": confidence,
+            "score": float(score),
+            "confidence": float(confidence),
             "reason": reason,
             "features": {
-                "rsi_14": float(curr_rsi),
-                "roc_10": float(curr_roc)
+                "rsi_14": curr_rsi,
+                "roc_10": curr_roc
             }
         }
