@@ -2,26 +2,29 @@ name: Trading Bot
 
 on:
   schedule:
-    - cron: '0 */6 * * *' # Every 6 hours (approx to loop limits)
-  workflow_dispatch: # Allows manual trigger
+    # Every 5 hours 50 min so there is a small buffer before the 6h hard limit
+    - cron: '50 */6 * * *'
+  workflow_dispatch: # Manual trigger
 
 concurrency:
   group: trading-bot
-  cancel-in-progress: false
+  cancel-in-progress: false   # Never kill a running bot mid-loop
 
 jobs:
   run-bot:
     runs-on: ubuntu-latest
-    timeout-minutes: 360 # Matches max loop minutes
+    # 350 minutes = safe under GitHub's ~6 hour job limit
+    timeout-minutes: 350
 
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
 
     - name: Set up Python
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
-        python-version: '3.10'
+        python-version: '3.11'
+        cache: 'pip'
 
     - name: Install dependencies
       run: |
@@ -37,5 +40,6 @@ jobs:
         PAPER_MODE: ${{ secrets.PAPER_MODE }}
         WATCHLIST: ${{ secrets.WATCHLIST }}
         MEAN_REVERSION_ELIGIBLE: ${{ secrets.MEAN_REVERSION_ELIGIBLE }}
+        GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
       run: |
         python -m bot.main
