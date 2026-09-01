@@ -1,7 +1,7 @@
 import pandas as pd
 import json
 import logging
-from typing import Dict, Any
+from typing import Dict, Any, List
 import google.generativeai as genai
 from bot.agents.base import BaseAgent
 from bot.config import GEMINI_API_KEY, GEMINI_MODEL
@@ -15,79 +15,85 @@ class GeminiContextAgent(BaseAgent):
         super().__init__("GeminiContextAgent")
         self.is_configured = bool(GEMINI_API_KEY)
         if self.is_configured:
-            genai.configure(api_key=GEMINI_API_KEY)
+            try:
+                genai.configure(api_key=GEMINI_API_KEY)
+            except Exception as e:
+                logger.error(f"Failed to configure Gemini: {e}")
+                self.is_configured = False
 
-    def analyze(self, symbol: str, price_history: pd.DataFrame, quant_signals: list = None, **kwargs) -> Dict[str, Any]:
+    def analyze(self, symbol: str, price_history: pd.DataFrame, quant_signals: List[Dict] = None, **kwargs) -> Dict[str, Any]:
         if not self.is_configured:
-            return self._create_hold_signal(symbol, "Gemini not configured")
+            return self._create_hold_signal(symbol, "Gemini not configured (set GEMINI_API_KEY)")
 
         if len(price_history) < 10:
-             return self._create_hold_signal(symbol, "Insufficient data for LLM analysis")
+            return self._create_hold_signal(symbol, "Insufficient data for LLM analysis")
 
+        # Simple cache keyed by symbol + last bar timestamp
         last_date = str(price_history.index[-1])
         cache_key = f"{symbol}_{last_date}"
-
         if cache_key in gemini_cache:
-            logger.info(f"Using cached Gemini analysis for {symbol}")
             return gemini_cache[cache_key]
 
         df = price_history.copy()
+        recent = df.tail(8)
 
-        recent_data = df.tail(5).to_dict(orient="records")
+        # Compact summary for the prompt
+        price_summary = {
+            "last_close": float(recent["close"].iloc[-1]),
+            "change_5d_pct": float((recent["close"].iloc[-1] / recent["close"].iloc[0] - 1) * 100) if len(recent) > 1 else 0,
+            "high_8d": float(recent["high"].max()),
+            "low_8d": float(recent["low"].min()),
+        }
 
         quant_summary = []
         if quant_signals:
             for s in quant_signals:
                 quant_summary.append({
-                    "agent": s["agent"],
-                    "signal": s["signal"],
-                    "confidence": s["confidence"]
+                    "agent": s.get("agent"),
+                    "signal": s.get("signal"),
+                    "confidence": round(float(s.get("confidence", 0)), 2),
+                    "reason": str(s.get("reason", ""))[:80]
                 })
 
-        context = {
-            "symbol": symbol,
-            "recent_price_action": recent_data,
-            "quant_signals": quant_summary
-        }
+        prompt = f"""You are a senior risk manager reviewing a trading signal for {symbol}.
+Your job is to act as an adversarial check against the quantitative agents.
 
-        prompt = f"""
-You are an adversarial financial analyst acting as a risk check.
-Review the provided technical and quantitative data for {symbol}.
-Identify potential risks, false breakouts, or macro conditions that might invalidate the quantitative signals.
-Provide your output as a strictly formatted JSON object with no markdown wrappers or backticks.
+Price context:
+{json.dumps(price_summary, indent=2)}
 
-Required schema:
+Quantitative agent signals:
+{json.dumps(quant_summary, indent=2)}
+
+Decide whether the overall bias should be BUY, SELL, or HOLD.
+Be conservative. Prefer HOLD when evidence is mixed or risk is elevated.
+
+Return ONLY valid JSON with this exact schema (no markdown):
 {{
   "signal": "BUY" | "SELL" | "HOLD",
-  "confidence": <float between 0.0 and 1.0>,
-  "reasoning": "<string explaining your decision>",
-  "risk_flags": ["<string>", ...],
-  "supporting_factors": ["<string>", ...],
-  "opposing_factors": ["<string>", ...]
+  "confidence": 0.0 to 1.0,
+  "reasoning": "one concise sentence",
+  "risk_flags": ["list of short risk notes"]
 }}
-
-Context:
-{json.dumps(context, indent=2)}
 """
 
         try:
-            model = genai.GenerativeModel(GEMINI_MODEL)
+            model = genai.GenerativeModel(GEMINI_MODEL or "gemini-2.0-flash")
             response = model.generate_content(
-                 prompt,
-                 generation_config={"response_mime_type": "application/json"}
+                prompt,
+                generation_config={"response_mime_type": "application/json"}
             )
 
-            raw_text = response.text.strip()
+            raw = response.text.strip()
+            data = json.loads(raw)
 
-            data = json.loads(raw_text)
-
-            signal_map = {"BUY": 1.0, "SELL": -1.0, "HOLD": 0.0}
-            raw_signal = data.get("signal", "HOLD").upper()
-            if raw_signal not in signal_map:
+            raw_signal = str(data.get("signal", "HOLD")).upper()
+            if raw_signal not in ("BUY", "SELL", "HOLD"):
                 raw_signal = "HOLD"
 
-            confidence = min(max(float(data.get("confidence", 0.0)), 0.0), 1.0)
-            score = signal_map[raw_signal] * confidence
+            confidence = float(data.get("confidence", 0.0))
+            confidence = max(0.0, min(1.0, confidence))
+
+            score = confidence if raw_signal == "BUY" else (-confidence if raw_signal == "SELL" else 0.0)
 
             result = {
                 "agent": self.name,
@@ -95,11 +101,9 @@ Context:
                 "signal": raw_signal,
                 "score": score,
                 "confidence": confidence,
-                "reason": data.get("reasoning", "No reason provided"),
+                "reason": data.get("reasoning", "No reason provided")[:200],
                 "features": {
-                    "risk_flags": data.get("risk_flags", []),
-                    "supporting_factors": data.get("supporting_factors", []),
-                    "opposing_factors": data.get("opposing_factors", [])
+                    "risk_flags": data.get("risk_flags", [])
                 }
             }
 
@@ -108,4 +112,4 @@ Context:
 
         except Exception as e:
             logger.error(f"Gemini API failure for {symbol}: {e}")
-            return self._create_hold_signal(symbol, f"Gemini API Error: {str(e)[:50]}")
+            return self._create_hold_signal(symbol, f"Gemini error: {str(e)[:60]}")
