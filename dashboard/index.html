@@ -3,456 +3,348 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Trading Dashboard</title>
-    <!-- Tailwind CSS -->
+    <title>Trading Bot Dashboard</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Chart.js -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <!-- Lucide Icons -->
     <script src="https://unpkg.com/lucide@latest"></script>
     <style>
-        body {
-            background-color: #f3f4f6; /* light gray background like in the screenshot */
-            color: #1f2937;
-        }
-        .card {
-            background-color: white;
-            border-radius: 0.5rem;
-            box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
-            padding: 1.5rem;
-        }
-        .card-header {
-            display: flex;
-            align-items: center;
-            font-size: 0.875rem;
-            font-weight: 600;
-            color: #6b7280;
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-            margin-bottom: 1rem;
-        }
-        .card-header i {
-            margin-right: 0.5rem;
-        }
-        .value-large {
-            font-size: 2.25rem;
-            font-weight: 700;
-            color: #111827;
-        }
+        body { background-color: #0f172a; color: #e2e8f0; }
+        .card { background-color: #1e293b; border-radius: 0.75rem; border: 1px solid #334155; padding: 1.25rem; }
+        .value-large { font-size: 1.875rem; font-weight: 700; color: #f8fafc; }
     </style>
 </head>
-<body class="p-4 md:p-8">
+<body class="p-4 md:p-8 min-h-screen">
 
-    <!-- Header -->
-    <div class="flex justify-between items-center mb-6">
-        <h1 class="text-xl font-semibold">Trading Dashboard</h1>
-        <div class="flex space-x-2">
-            <!-- Sheet ID Input so the user can connect their sheet purely client-side -->
-            <input type="text" id="sheet-id-input" placeholder="Google Sheet ID" class="border p-2 rounded text-sm w-64 focus:outline-none focus:ring-2 focus:ring-blue-500">
-            <button onclick="saveConfigAndLoad()" class="bg-white border hover:bg-gray-50 px-4 py-2 rounded text-sm font-medium flex items-center">
-                <i data-lucide="refresh-cw" class="w-4 h-4 mr-2"></i> Load Data
+    <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
+        <div>
+            <h1 class="text-2xl font-bold text-white">Multi-Agent Trading Dashboard</h1>
+            <p class="text-sm text-slate-400 mt-1">Paper Trading • Alpaca + Google Sheets</p>
+        </div>
+        <div class="flex space-x-2 w-full md:w-auto">
+            <input type="text" id="sheet-id-input" placeholder="Google Sheet ID" 
+                   class="bg-slate-800 border border-slate-600 text-white p-2 rounded-lg text-sm w-full md:w-72 focus:outline-none focus:ring-2 focus:ring-yellow-500">
+            <button onclick="saveConfigAndLoad()" 
+                    class="bg-yellow-600 hover:bg-yellow-500 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center whitespace-nowrap">
+                <i data-lucide="refresh-cw" class="w-4 h-4 mr-2"></i> Load
             </button>
         </div>
     </div>
 
-    <!-- Top Row Cards -->
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-
-        <!-- Cash Balance -->
-        <div class="card flex flex-col justify-between">
-            <div>
-                <div class="card-header">
-                    <i data-lucide="wallet" class="w-5 h-5"></i> CASH BALANCE
-                </div>
-                <div class="value-large" id="cash-balance">$0.00</div>
+    <!-- Top Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+        <div class="card">
+            <div class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2 flex items-center">
+                <i data-lucide="wallet" class="w-4 h-4 mr-2"></i> Cash Balance
             </div>
-            <div class="mt-4 flex justify-between items-end border-b pb-2">
-                <span class="text-sm text-gray-500">Capital Deployed</span>
-                <span class="text-sm text-gray-500" id="capital-deployed-pct">0%</span>
+            <div class="value-large" id="cash-balance">$0.00</div>
+            <div class="mt-3 text-sm text-slate-400 flex justify-between">
+                <span>Capital Deployed</span>
+                <span id="capital-deployed-pct">0%</span>
             </div>
         </div>
-
-        <!-- Buying Power -->
         <div class="card">
-            <div class="card-header">
-                <i data-lucide="arrow-left-right" class="w-5 h-5"></i> BUYING POWER
+            <div class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2 flex items-center">
+                <i data-lucide="arrow-left-right" class="w-4 h-4 mr-2"></i> Buying Power
             </div>
             <div class="value-large" id="buying-power">$0.00</div>
         </div>
-
-        <!-- Bot Status -->
         <div class="card relative">
-            <div class="card-header">
-                <i data-lucide="power" class="w-5 h-5"></i> BOT STATUS
+            <div class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2 flex items-center">
+                <i data-lucide="power" class="w-4 h-4 mr-2"></i> Bot Status
             </div>
-            <div class="flex items-center space-x-2 mt-4">
-                <div id="status-indicator" class="w-4 h-4 rounded-full bg-yellow-500"></div>
-                <span id="bot-status-text" class="text-xl font-semibold text-yellow-600">Checking...</span>
+            <div class="flex items-center space-x-2 mt-2">
+                <div id="status-indicator" class="w-3 h-3 rounded-full bg-yellow-500"></div>
+                <span id="bot-status-text" class="text-lg font-semibold text-yellow-400">Checking...</span>
             </div>
-            <div class="text-xs text-gray-400 mt-2" id="last-update-text">Last update: N/A</div>
-
-            <button class="absolute bottom-4 right-4 text-sm border rounded px-3 py-1 hover:bg-gray-50 text-gray-600">
-                Fullscreen
-            </button>
+            <div class="text-xs text-slate-500 mt-2" id="last-update-text">Last update: N/A</div>
         </div>
     </div>
 
-    <!-- Second Row -->
-    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-
-        <!-- Equity Curve Chart -->
+    <!-- Chart + Positions -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
         <div class="card lg:col-span-2">
-            <div class="card-header border-l-4 border-yellow-600 pl-2 ml-[-1.5rem]">
-                Equity Curve
-            </div>
-            <div class="relative h-64 w-full">
+            <div class="text-sm font-semibold text-slate-300 mb-4">Equity Curve</div>
+            <div class="relative h-64">
                 <canvas id="equityChart"></canvas>
             </div>
         </div>
-
-        <!-- Active Positions and Watchlist Column -->
-        <div class="flex flex-col gap-6">
-            <!-- Active Positions -->
+        <div class="flex flex-col gap-4">
             <div class="card flex-1">
-                <div class="card-header border-l-4 border-yellow-600 pl-2 ml-[-1.5rem] flex justify-between w-full">
+                <div class="text-sm font-semibold text-slate-300 mb-3 flex justify-between">
                     <span>Active Positions</span>
-                    <i data-lucide="briefcase" class="w-5 h-5"></i>
+                    <i data-lucide="briefcase" class="w-4 h-4"></i>
                 </div>
-                <div id="positions-container" class="mt-4 h-56 overflow-y-auto">
-                    <div class="flex flex-col items-center justify-center h-full text-gray-400">
-                        <i data-lucide="eye" class="w-12 h-12 mb-2 bg-gray-100 p-2 rounded"></i>
-                        <p>No active positions.</p>
-                    </div>
+                <div id="positions-container" class="h-48 overflow-y-auto text-sm">
+                    <div class="text-slate-500 text-center py-8">No positions</div>
                 </div>
             </div>
-
-            <!-- Active Watchlist -->
             <div class="card flex-1">
-                <div class="card-header border-l-4 border-yellow-600 pl-2 ml-[-1.5rem] flex justify-between w-full">
-                    <span>Active Watchlist</span>
-                    <i data-lucide="list" class="w-5 h-5"></i>
+                <div class="text-sm font-semibold text-slate-300 mb-3 flex justify-between">
+                    <span>Watchlist Regime</span>
+                    <i data-lucide="list" class="w-4 h-4"></i>
                 </div>
-                <div id="watchlist-container" class="mt-4 h-56 overflow-y-auto">
-                    <div class="flex flex-col items-center justify-center h-full text-gray-400">
-                        <i data-lucide="eye-off" class="w-12 h-12 mb-2 bg-gray-100 p-2 rounded"></i>
-                        <p>Watchlist is empty.</p>
-                    </div>
+                <div id="watchlist-container" class="h-48 overflow-y-auto text-sm">
+                    <div class="text-slate-500 text-center py-8">Empty</div>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- Third Row: Recent Trades -->
-    <div class="card mt-6">
-        <div class="card-header">
-            Recent Trades
-        </div>
+    <!-- Trades -->
+    <div class="card">
+        <div class="text-sm font-semibold text-slate-300 mb-4">Recent Trades</div>
         <div class="overflow-x-auto">
             <table class="w-full text-sm text-left">
-                <thead class="text-xs text-gray-500 uppercase bg-gray-50">
+                <thead class="text-xs text-slate-400 uppercase border-b border-slate-700">
                     <tr>
-                        <th class="px-4 py-3">Time</th>
-                        <th class="px-4 py-3">Symbol</th>
-                        <th class="px-4 py-3">Side</th>
-                        <th class="px-4 py-3">Qty</th>
-                        <th class="px-4 py-3">Price</th>
-                        <th class="px-4 py-3">Regime</th>
-                        <th class="px-4 py-3">Sleeve</th>
-                        <th class="px-4 py-3">Status</th>
+                        <th class="px-3 py-2">Time</th>
+                        <th class="px-3 py-2">Symbol</th>
+                        <th class="px-3 py-2">Side</th>
+                        <th class="px-3 py-2">Qty</th>
+                        <th class="px-3 py-2">Price</th>
+                        <th class="px-3 py-2">Regime</th>
+                        <th class="px-3 py-2">Status</th>
                     </tr>
                 </thead>
                 <tbody id="trades-tbody">
-                    <tr><td colspan="8" class="text-center py-4 text-gray-500">No trades recorded.</td></tr>
+                    <tr><td colspan="7" class="text-center py-6 text-slate-500">No trades yet</td></tr>
                 </tbody>
             </table>
         </div>
     </div>
 
     <script>
-        // Initialize Icons
         lucide.createIcons();
-
-        // Global Chart Instance
         let equityChartInstance = null;
 
-        // On Load
         document.addEventListener('DOMContentLoaded', () => {
-            const savedSheetId = localStorage.getItem('tradingBotSheetId');
-            if (savedSheetId) {
-                document.getElementById('sheet-id-input').value = savedSheetId;
-                loadData(savedSheetId);
+            const saved = localStorage.getItem('tradingBotSheetId');
+            if (saved) {
+                document.getElementById('sheet-id-input').value = saved;
+                loadData(saved);
             }
         });
 
         function saveConfigAndLoad() {
             const sheetId = document.getElementById('sheet-id-input').value.trim();
-            if (!sheetId) {
-                alert("Please enter a Google Sheet ID.");
-                return;
-            }
+            if (!sheetId) { alert("Please enter your Google Sheet ID"); return; }
             localStorage.setItem('tradingBotSheetId', sheetId);
             loadData(sheetId);
         }
 
+        // Pure client-side: uses Google Sheets public CSV export
+        async function fetchSheetCsv(sheetId, sheetName) {
+            // Requires the sheet to be shared as "Anyone with the link can view"
+            const url = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(sheetName)}`;
+            const res = await fetch(url);
+            if (!res.ok) throw new Error(`Failed to load ${sheetName}: ${res.status}`);
+            const text = await res.text();
+            return parseCsv(text);
+        }
+
+        function parseCsv(text) {
+            const lines = text.trim().split('\n');
+            if (lines.length < 2) return [];
+            const headers = lines[0].split(',').map(h => h.replace(/^"|"$/g, '').trim().toLowerCase().replace(/\s+/g, '_'));
+            const rows = [];
+            for (let i = 1; i < lines.length; i++) {
+                const values = lines[i].match(/(".*?"|[^,]+)(?=,|$)/g) || [];
+                const obj = {};
+                headers.forEach((h, idx) => {
+                    let v = (values[idx] || '').replace(/^"|"$/g, '').trim();
+                    obj[h] = v;
+                });
+                rows.push(obj);
+            }
+            return rows;
+        }
+
         async function loadData(sheetId) {
-            // sheetId is now optional/ignored since the backend uses the environment variable,
-            // but we keep the parameter for backwards compatibility with the UI button
             try {
-                const response = await fetch('/api/data');
+                document.getElementById('bot-status-text').innerText = "Loading...";
 
-                if (!response.ok) {
-                    let errorMessage = `HTTP Error ${response.status}`;
-                    try {
-                        const errorData = await response.json();
-                        if (errorData.error) errorMessage = errorData.error;
-                    } catch (e) {
-                        // Not JSON
-                    }
-                    throw new Error(errorMessage);
-                }
+                const [equityData, positionsData, tradesData, watchlistData] = await Promise.all([
+                    fetchSheetCsv(sheetId, 'Equity').catch(() => []),
+                    fetchSheetCsv(sheetId, 'Positions').catch(() => []),
+                    fetchSheetCsv(sheetId, 'Trades').catch(() => []),
+                    fetchSheetCsv(sheetId, 'Watchlist').catch(() => [])
+                ]);
 
-                const data = await response.json();
-
-                const equityData = data.equity;
-                const positionsData = data.positions;
-                const tradesData = data.trades;
-                const watchlistData = data.watchlist;
-
-                if (equityData && equityData.length > 0) {
+                if (equityData.length > 0) {
                     updateEquity(equityData);
                     updateChart(equityData);
                     updateBotStatus(equityData);
                 } else {
-                    document.getElementById('bot-status-text').innerText = "No Data";
-                    document.getElementById('bot-status-text').className = "text-xl font-semibold text-yellow-600";
-                    document.getElementById('status-indicator').className = "w-4 h-4 rounded-full bg-yellow-500";
+                    document.getElementById('bot-status-text').innerText = "No Equity Data";
+                    document.getElementById('status-indicator').className = "w-3 h-3 rounded-full bg-yellow-500";
                 }
 
-                if (positionsData) updatePositions(positionsData);
-                if (tradesData) updateTrades(tradesData);
-                if (watchlistData) updateWatchlist(watchlistData);
-
-                // Re-initialize icons for dynamically injected content
+                updatePositions(positionsData);
+                updateTrades(tradesData);
+                updateWatchlist(watchlistData);
                 lucide.createIcons();
 
-            } catch (error) {
-                console.error("Error loading data:", error);
-                alert(`Server Error: ${error.message}`);
-
-                document.getElementById('bot-status-text').innerText = "Server Error";
-                document.getElementById('bot-status-text').className = "text-xl font-semibold text-red-600";
-                document.getElementById('status-indicator').className = "w-4 h-4 rounded-full bg-red-500";
+            } catch (err) {
+                console.error(err);
+                alert("Error loading data. Make sure the Google Sheet is shared as 'Anyone with the link can view' and the Sheet ID is correct.\n\n" + err.message);
+                document.getElementById('bot-status-text').innerText = "Error";
+                document.getElementById('status-indicator').className = "w-3 h-3 rounded-full bg-red-500";
             }
         }
 
-        function formatCurrency(numStr) {
-            const num = parseFloat(numStr) || 0;
-            return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(num);
+        function formatCurrency(num) {
+            return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(parseFloat(num) || 0);
         }
 
-        function updateEquity(equityData) {
-            if (!equityData || equityData.length === 0) return;
-            const latest = equityData[equityData.length - 1];
-
+        function updateEquity(data) {
+            if (!data.length) return;
+            const latest = data[data.length - 1];
             const cash = parseFloat(latest.cash) || 0;
             const equity = parseFloat(latest.equity) || 0;
-            const buyingPower = parseFloat(latest.buying_power) || 0;
+            const bp = parseFloat(latest.buying_power) || 0;
 
             document.getElementById('cash-balance').innerText = formatCurrency(cash);
-            document.getElementById('buying-power').innerText = formatCurrency(buyingPower);
+            document.getElementById('buying-power').innerText = formatCurrency(bp);
 
             if (equity > 0) {
-                const deployed = equity - cash;
-                const deployedPct = (deployed / equity) * 100;
-                document.getElementById('capital-deployed-pct').innerText = `${deployedPct.toFixed(1)}%`;
+                const deployed = ((equity - cash) / equity * 100).toFixed(1);
+                document.getElementById('capital-deployed-pct').innerText = deployed + '%';
             }
         }
 
-        function updateBotStatus(equityData) {
+        function updateBotStatus(data) {
+            const latest = data[data.length - 1];
             const statusText = document.getElementById('bot-status-text');
             const statusInd = document.getElementById('status-indicator');
             const lastUpdate = document.getElementById('last-update-text');
 
-            if (!equityData || equityData.length === 0) {
-                statusText.innerText = "Not Running";
-                statusText.className = "text-xl font-semibold text-yellow-600";
-                statusInd.className = "w-4 h-4 rounded-full bg-yellow-500";
-                return;
-            }
-
-            const latest = equityData[equityData.length - 1];
             if (latest.timestamp) {
-                lastUpdate.innerText = `Last update: ${latest.timestamp.split('.')[0]}`;
-
-                // Very naive check: if updated in the last 15 mins, consider it running
-                // Sheet timestamps are usually string ISO dates.
-                const lastTime = new Date(latest.timestamp).getTime();
-                const now = new Date().getTime();
-                const diffMins = (now - lastTime) / (1000 * 60);
-
-                if (diffMins < 15) {
+                lastUpdate.innerText = `Last update: ${latest.timestamp.split('.')[0].replace('T', ' ')}`;
+                const diffMins = (Date.now() - new Date(latest.timestamp).getTime()) / 60000;
+                if (diffMins < 20) {
                     statusText.innerText = "Running";
-                    statusText.className = "text-xl font-semibold text-green-600";
-                    statusInd.className = "w-4 h-4 rounded-full bg-green-500";
+                    statusText.className = "text-lg font-semibold text-green-400";
+                    statusInd.className = "w-3 h-3 rounded-full bg-green-500";
                 } else {
-                    statusText.innerText = "Not Running";
-                    statusText.className = "text-xl font-semibold text-yellow-600";
-                    statusInd.className = "w-4 h-4 rounded-full bg-yellow-500";
+                    statusText.innerText = "Idle";
+                    statusText.className = "text-lg font-semibold text-yellow-400";
+                    statusInd.className = "w-3 h-3 rounded-full bg-yellow-500";
                 }
             }
         }
 
-        function updateChart(equityData) {
-            if (!equityData || equityData.length === 0) return;
-
-            const labels = equityData.map(d => {
-                if(!d.timestamp) return '';
-                const dObj = new Date(d.timestamp);
-                return `${dObj.getHours().toString().padStart(2,'0')}:${dObj.getMinutes().toString().padStart(2,'0')}`;
+        function updateChart(data) {
+            const labels = data.map(d => {
+                if (!d.timestamp) return '';
+                const dt = new Date(d.timestamp);
+                return `${dt.getHours().toString().padStart(2,'0')}:${dt.getMinutes().toString().padStart(2,'0')}`;
             });
-            const values = equityData.map(d => parseFloat(d.equity) || 0);
+            const values = data.map(d => parseFloat(d.equity) || 0);
 
             const ctx = document.getElementById('equityChart').getContext('2d');
+            if (equityChartInstance) equityChartInstance.destroy();
 
-            if (equityChartInstance) {
-                equityChartInstance.destroy();
-            }
-
-            // Create gradient fill similar to screenshot
-            const gradient = ctx.createLinearGradient(0, 0, 0, 400);
-            gradient.addColorStop(0, 'rgba(202, 138, 4, 0.2)'); // Yellow-600 with opacity
-            gradient.addColorStop(1, 'rgba(202, 138, 4, 0)');
+            const gradient = ctx.createLinearGradient(0, 0, 0, 300);
+            gradient.addColorStop(0, 'rgba(234, 179, 8, 0.25)');
+            gradient.addColorStop(1, 'rgba(234, 179, 8, 0)');
 
             equityChartInstance = new Chart(ctx, {
                 type: 'line',
                 data: {
-                    labels: labels,
+                    labels,
                     datasets: [{
-                        label: 'Total Equity',
                         data: values,
-                        borderColor: '#ca8a04', // yellow-600
+                        borderColor: '#eab308',
                         backgroundColor: gradient,
                         borderWidth: 2,
                         pointRadius: 0,
-                        pointHoverRadius: 4,
                         fill: true,
-                        tension: 0.1
+                        tension: 0.15
                     }]
                 },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
-                    plugins: {
-                        legend: { display: false }
-                    },
+                    plugins: { legend: { display: false } },
                     scales: {
-                        x: {
-                            grid: { display: false },
-                            ticks: { maxTicksLimit: 6 }
-                        },
-                        y: {
-                            grid: { borderDash: [4, 4], color: '#e5e7eb' },
-                            ticks: {
-                                callback: function(value) { return '$' + value; }
-                            }
-                        }
+                        x: { grid: { display: false }, ticks: { maxTicksLimit: 8, color: '#94a3b8' } },
+                        y: { grid: { color: '#334155' }, ticks: { color: '#94a3b8', callback: v => '$' + v } }
                     }
                 }
             });
         }
 
-        function updatePositions(positionsData) {
+        function updatePositions(data) {
             const container = document.getElementById('positions-container');
-            if (!positionsData || positionsData.length === 0) {
-                container.innerHTML = `
-                    <div class="flex flex-col items-center justify-center h-full text-gray-400 mt-8">
-                        <p class="mb-2">👀</p>
-                        <p>No active positions.</p>
-                    </div>`;
+            if (!data || !data.length) {
+                container.innerHTML = '<div class="text-slate-500 text-center py-8">No active positions</div>';
                 return;
             }
-
             let html = '<div class="space-y-3">';
-            positionsData.forEach(pos => {
+            data.forEach(pos => {
                 const pnl = parseFloat(pos.unrealized_pl) || 0;
-                const pnlColor = pnl >= 0 ? 'text-green-600' : 'text-red-600';
-
+                const color = pnl >= 0 ? 'text-green-400' : 'text-red-400';
                 html += `
-                    <div class="flex justify-between items-center border-b pb-2">
+                    <div class="flex justify-between items-center border-b border-slate-700 pb-2">
                         <div>
-                            <div class="font-bold">${pos.symbol}</div>
-                            <div class="text-xs text-gray-500">${pos.qty} shares @ $${parseFloat(pos.avg_entry_price||0).toFixed(2)}</div>
+                            <div class="font-semibold text-white">${pos.symbol}</div>
+                            <div class="text-xs text-slate-400">${pos.qty} @ $${parseFloat(pos.avg_entry_price||0).toFixed(2)}</div>
                         </div>
                         <div class="text-right">
-                            <div class="${pnlColor} font-semibold">${pnl >= 0 ? '+' : ''}$${pnl.toFixed(2)}</div>
-                            <div class="text-xs text-gray-500">Current: $${parseFloat(pos.current_price||0).toFixed(2)}</div>
+                            <div class="${color} font-medium">${pnl >= 0 ? '+' : ''}$${pnl.toFixed(2)}</div>
+                            <div class="text-xs text-slate-400">$${parseFloat(pos.current_price||0).toFixed(2)}</div>
                         </div>
                     </div>`;
             });
-            html += '</div>';
-            container.innerHTML = html;
+            container.innerHTML = html + '</div>';
         }
 
-        function updateTrades(tradesData) {
+        function updateTrades(data) {
             const tbody = document.getElementById('trades-tbody');
-            if (!tradesData || tradesData.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="8" class="text-center py-4 text-gray-500">No trades recorded.</td></tr>`;
+            if (!data || !data.length) {
+                tbody.innerHTML = '<tr><td colspan="7" class="text-center py-6 text-slate-500">No trades yet</td></tr>';
                 return;
             }
-
-            // Reverse to show newest first, and take last 10
-            const recent = [...tradesData].reverse().slice(0, 10);
-
+            const recent = [...data].reverse().slice(0, 12);
             let html = '';
             recent.forEach(t => {
-                const sideColor = (t.side || '').toLowerCase() === 'buy' ? 'text-green-600' : 'text-red-600';
-                const statusColor = (t.status || '').toLowerCase() === 'filled' ? 'text-green-600' : 'text-gray-600';
+                const sideColor = (t.side || '').toLowerCase() === 'buy' ? 'text-green-400' : 'text-red-400';
                 const timeStr = t.timestamp ? t.timestamp.split('.')[0].replace('T', ' ') : '';
-
                 html += `
-                    <tr class="bg-white border-b">
-                        <td class="px-4 py-2">${timeStr}</td>
-                        <td class="px-4 py-2 font-medium">${t.symbol}</td>
-                        <td class="px-4 py-2 ${sideColor} font-semibold uppercase">${t.side}</td>
-                        <td class="px-4 py-2">${t.qty}</td>
-                        <td class="px-4 py-2">$${parseFloat(t.price||0).toFixed(2)}</td>
-                        <td class="px-4 py-2 text-xs">${t.regime}</td>
-                        <td class="px-4 py-2 text-xs">${t.sleeve}</td>
-                        <td class="px-4 py-2 ${statusColor} capitalize">${t.status}</td>
+                    <tr class="border-b border-slate-800">
+                        <td class="px-3 py-2 text-slate-400">${timeStr}</td>
+                        <td class="px-3 py-2 font-medium text-white">${t.symbol}</td>
+                        <td class="px-3 py-2 ${sideColor} font-semibold uppercase">${t.side}</td>
+                        <td class="px-3 py-2">${t.qty}</td>
+                        <td class="px-3 py-2">$${parseFloat(t.price||0).toFixed(2)}</td>
+                        <td class="px-3 py-2 text-xs text-slate-400">${t.regime || '-'}</td>
+                        <td class="px-3 py-2 capitalize">${t.status || '-'}</td>
                     </tr>`;
             });
             tbody.innerHTML = html;
         }
 
-        function updateWatchlist(watchlistData) {
+        function updateWatchlist(data) {
             const container = document.getElementById('watchlist-container');
-            if (!watchlistData || watchlistData.length === 0) {
-                container.innerHTML = `
-                    <div class="flex flex-col items-center justify-center h-full text-gray-400">
-                        <i data-lucide="eye-off" class="w-12 h-12 mb-2 bg-gray-100 p-2 rounded"></i>
-                        <p>Watchlist is empty.</p>
-                    </div>`;
+            if (!data || !data.length) {
+                container.innerHTML = '<div class="text-slate-500 text-center py-8">Empty</div>';
                 return;
             }
-
-            let html = '<div class="space-y-3">';
-            watchlistData.forEach(item => {
-                const regimeColor = item.regime === 'trending' ? 'text-green-600' : (item.regime === 'ranging' ? 'text-blue-600' : 'text-gray-600');
-                const timeStr = item.last_updated ? item.last_updated.split('.')[0].replace('T', ' ') : '';
+            let html = '<div class="space-y-2">';
+            data.forEach(item => {
+                const regime = (item.regime || 'unknown').toLowerCase();
+                let color = 'text-slate-400';
+                if (regime.includes('bull') || regime.includes('trending_bull')) color = 'text-green-400';
+                else if (regime.includes('bear') || regime.includes('risk')) color = 'text-red-400';
+                else if (regime.includes('ranging')) color = 'text-blue-400';
 
                 html += `
-                    <div class="flex justify-between items-center border-b pb-2">
-                        <div>
-                            <div class="font-bold">${item.symbol || 'Unknown'}</div>
-                            <div class="text-xs text-gray-500">${timeStr}</div>
-                        </div>
-                        <div class="text-right">
-                            <div class="${regimeColor} font-semibold uppercase text-sm">${item.regime || 'Unknown'}</div>
-                        </div>
+                    <div class="flex justify-between items-center border-b border-slate-700 pb-2">
+                        <div class="font-medium text-white">${item.symbol || '?'}</div>
+                        <div class="${color} text-xs font-semibold uppercase">${item.regime || '-'}</div>
                     </div>`;
             });
-            html += '</div>';
-            container.innerHTML = html;
+            container.innerHTML = html + '</div>';
         }
     </script>
 </body>
