@@ -1,102 +1,158 @@
 import math
-import pandas as pd
+import logging
+from typing import Dict, Any, List, Optional
 
-def calculate_position_size(account_equity: float, atr: float, risk_per_trade_pct: float, stop_multiple: float = 2.0) -> int:
+logger = logging.getLogger(__name__)
+
+def calculate_position_size(
+    account_equity: float,
+    atr: float,
+    risk_per_trade_pct: float,
+    stop_multiple: float = 2.0,
+    max_shares: Optional[int] = None
+) -> int:
     """
-    Returns (risk_per_trade_pct * account_equity) / (atr * stop_multiple),
-    rounded down to a whole share count.
+    Volatility-adjusted position sizing.
+    Risk a fixed % of equity based on ATR distance to stop.
     """
-    if atr <= 0: return 0
+    if atr <= 0 or account_equity <= 0:
+        return 0
+
     risk_amount = account_equity * risk_per_trade_pct
     risk_per_share = atr * stop_multiple
+
+    if risk_per_share <= 0:
+        return 0
+
     shares = math.floor(risk_amount / risk_per_share)
-    return shares
+
+    if max_shares is not None:
+        shares = min(shares, max_shares)
+
+    return max(shares, 0)
+
 
 def calculate_stop_price(entry_price: float, atr: float, side: str, stop_multiple: float = 2.0) -> float:
-    """
-    Returns the stop-loss price, stop_multiple * atr away from entry
-    in the adverse direction.
-    """
-    if side.lower() == 'buy':
+    """Initial stop loss price."""
+    if side.lower() in ("buy", "long"):
         return entry_price - (stop_multiple * atr)
     else:
         return entry_price + (stop_multiple * atr)
 
-def check_portfolio_risk(open_positions: list, new_position_risk: float, max_total_risk_pct: float, account_equity: float) -> bool:
+
+def calculate_trailing_stop(
+    entry_price: float,
+    current_price: float,
+    atr: float,
+    side: str,
+    current_stop: Optional[float] = None,
+    trail_multiple: float = 2.5
+) -> float:
     """
-    Sums risk already committed across open_positions plus the new
-    position's risk, returns False if this would exceed
-    max_total_risk_pct of equity.
-    (Assuming open_positions risk is unrealized loss if any, or a predefined risk per position).
-    For simplicity, we estimate committed risk as max(0, avg_entry - current) * qty for longs.
-    A more rigorous approach would store the initial risk or stop loss.
-    Here we simply approximate.
+    Simple ATR trailing stop.
+    For longs: stop only moves up.
+    For shorts: stop only moves down.
+    """
+    if side.lower() in ("buy", "long"):
+        new_stop = current_price - (trail_multiple * atr)
+        if current_stop is None:
+            return new_stop
+        return max(current_stop, new_stop)  # only ratchet up
+    else:
+        new_stop = current_price + (trail_multiple * atr)
+        if current_stop is None:
+            return new_stop
+        return min(current_stop, new_stop)  # only ratchet down
+
+
+def check_portfolio_risk(
+    open_positions: list,
+    new_position_risk: float,
+    max_total_risk_pct: float,
+    account_equity: float
+) -> bool:
+    """
+    Approximate total risk.
+    Uses unrealized loss as proxy for open risk + the new trade's planned risk.
     """
     total_open_risk = 0.0
     for pos in open_positions:
-        # crude approximation of risk on current position if stop was not tracked
-        # ideally we should track the initial stop.
-        # we will use unrealized_pl if negative as current risk, but it's a proxy.
-        if pos['unrealized_pl'] < 0:
-            total_open_risk += abs(pos['unrealized_pl'])
+        # Prefer unrealized loss as current risk proxy
+        if pos.get("unrealized_pl", 0) < 0:
+            total_open_risk += abs(pos["unrealized_pl"])
+        else:
+            # Fallback: rough 2% of position value as risk
+            pos_value = abs(pos.get("qty", 0) * pos.get("current_price", 0))
+            total_open_risk += pos_value * 0.02
 
-    total_projected_risk = total_open_risk + new_position_risk
-    max_allowed_risk = account_equity * max_total_risk_pct
+    total_projected = total_open_risk + new_position_risk
+    max_allowed = account_equity * max_total_risk_pct
 
-    return total_projected_risk <= max_allowed_risk
+    return total_projected <= max_allowed
 
-def check_drawdown_breaker(equity_history: list, max_drawdown_pct: float, window_days: int = 30) -> bool:
+
+def check_drawdown_breaker(equity_history: list, max_drawdown_pct: float, window: int = 80) -> bool:
     """
-    Returns True (halt new entries) if equity has drawn down more than
-    max_drawdown_pct from its peak within the trailing window_days.
+    Halt new entries if we are down more than max_drawdown_pct from the recent peak.
+    Works across multiple GitHub Actions runs because we load history from Sheets.
     """
-    if not equity_history:
+    if not equity_history or len(equity_history) < 3:
         return False
 
-    # take last window_days of equity
-    recent_equity = equity_history[-window_days:]
-    if not recent_equity:
+    recent = equity_history[-window:]
+    peak = max(recent)
+    current = recent[-1]
+
+    if peak <= 0:
         return False
 
-    peak = max(recent_equity)
-    current = recent_equity[-1]
-
-    drawdown = (peak - current) / peak if peak > 0 else 0
+    drawdown = (peak - current) / peak
     return drawdown > max_drawdown_pct
 
-import logging
-from typing import Dict, Any, List
-
-logger = logging.getLogger(__name__)
 
 class RiskEngine:
     def __init__(self, paper_mode: bool, max_position_pct: float):
         self.paper_mode = paper_mode
         self.max_position_pct = max_position_pct
 
-    def evaluate_order(self, symbol: str, signal: str, qty: int, price: float, equity: float, buying_power: float) -> Dict[str, Any]:
+    def evaluate_order(
+        self,
+        symbol: str,
+        signal: str,
+        qty: int,
+        price: float,
+        equity: float,
+        buying_power: float
+    ) -> Dict[str, Any]:
+
         if signal == "HOLD":
-             return {"approved": False, "reason": "Signal is HOLD"}
+            return {"approved": False, "reason": "Signal is HOLD"}
 
         if qty <= 0:
-             return {"approved": False, "reason": "Quantity is zero or negative"}
+            return {"approved": False, "reason": "Quantity is zero or negative"}
 
         if equity <= 0:
-             return {"approved": False, "reason": "Account equity is zero or negative"}
+            return {"approved": False, "reason": "Account equity is zero or negative"}
 
         if price <= 0 or math.isnan(price) or math.isinf(price):
-             return {"approved": False, "reason": "Invalid price data"}
+            return {"approved": False, "reason": "Invalid price data"}
 
         if not self.paper_mode:
-            logger.warning("LIVE TRADING MODE DETECTED. Proceeding with extreme caution.")
+            logger.warning("LIVE TRADING MODE DETECTED. Extreme caution.")
 
         position_value = qty * price
-
         max_allowed_value = equity * self.max_position_pct
+
         if position_value > max_allowed_value:
-             return {"approved": False, "reason": f"Position value ({position_value}) exceeds max allowed ({max_allowed_value})"}
+            return {
+                "approved": False,
+                "reason": f"Position value ${position_value:.0f} exceeds max ${max_allowed_value:.0f}"
+            }
 
         if signal == "BUY" and position_value > buying_power:
-             return {"approved": False, "reason": f"Insufficient buying power (Needs {position_value}, has {buying_power})"}
+            return {
+                "approved": False,
+                "reason": f"Insufficient buying power (need ${position_value:.0f}, have ${buying_power:.0f})"
+            }
 
         return {"approved": True, "reason": "Risk checks passed"}
