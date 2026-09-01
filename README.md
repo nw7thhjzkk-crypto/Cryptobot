@@ -1,97 +1,110 @@
 # Multi-Agent Paper Trading Bot
 
-Professional multi-agent paper trading system built on **Alpaca** + **Google Sheets**.
+A production-ready multi-agent paper trading system for **Alpaca** with persistent state in **Google Sheets** and a clean client-side dashboard.
 
-Designed for reliability, clear regime detection, and clean risk management.
-Optimized for paper trading (especially useful for users in India).
+Designed to run continuously on free GitHub Actions (handles the 6-hour limit by chaining runs and loading previous equity history).
 
-## Key Features (Upgraded)
+---
 
-- **Strong Market Regime Detection**  
-  ADX + ATR + SMA 50/200 → `trending_bull`, `trending_bear`, `ranging`, `risk_off`, `transitional`
+## Features
 
-- **Improved Agents**
-  - TrendAgent → ADX filter + volume confirmation
-  - MeanReversionAgent → only trades in true ranging markets
-  - Momentum, Breakout, Volume, Relative Strength, Volatility agents
-  - Optional Gemini Context Agent (you have Gemini Pro)
+### Strategy Engine
+- **Market Regime Detection** — ADX + ATR + SMA structure → `trending_bull`, `trending_bear`, `ranging`, `risk_off`, `transitional`
+- **Specialized Agents**
+  - Trend (ADX + volume filtered)
+  - Mean Reversion (only in ranging markets)
+  - Momentum, Breakout, Volume, Volatility, Relative Strength
+  - Gemini Context Agent (adversarial risk check – works with your Gemini Pro key)
+- **Regime-aware Consensus** — agent weights automatically adjust by market regime
+- **Risk Management** — ATR position sizing, portfolio risk limits, drawdown breaker, max positions
 
-- **Regime-aware Consensus**  
-  Weights change automatically depending on market regime.
+### Infrastructure
+- Continuous paper trading across GitHub Actions runs
+- Equity history + positions persisted in Google Sheets
+- Pure client-side dashboard (no backend required)
+- Netlify-ready static frontend
 
-- **Solid Risk Management**  
-  ATR-based position sizing, portfolio risk limits, drawdown breaker, max positions.
+---
 
-- **Clean Dashboard** (pure client-side)  
-  Works with Netlify / any static host. Just paste your Google Sheet ID.
+## Setup (5 minutes)
 
-## Quick Start
+### 1. Secrets (GitHub → Settings → Secrets and variables → Actions)
 
-1. Clone & install
-```bash
-pip install -r requirements.txt
-```
+| Secret | Required | Notes |
+|--------|----------|-------|
+| `ALPACA_API_KEY` | Yes | Paper keys |
+| `ALPACA_SECRET_KEY` | Yes | Paper keys |
+| `GOOGLE_SERVICE_ACCOUNT_JSON` | Yes | Full JSON as one line |
+| `GOOGLE_SHEET_ID` | Yes | From the sheet URL |
+| `PAPER_MODE` | Yes | Set to `true` |
+| `GEMINI_API_KEY` | Recommended | You have Gemini Pro |
+| `WATCHLIST` | Optional | Default includes stocks + BTC/USD + ETH/USD |
 
-2. Set secrets (GitHub Actions → Settings → Secrets)
+### 2. Google Sheet
+Share the sheet as **Anyone with the link can view** (required for the dashboard).
 
-Required:
-- `ALPACA_API_KEY`
-- `ALPACA_SECRET_KEY`
-- `GOOGLE_SERVICE_ACCOUNT_JSON` (full JSON as one line)
-- `GOOGLE_SHEET_ID`
-- `PAPER_MODE` = `true` (keep this true for now)
+### 3. Run the bot
+Actions → **Trading Bot** → **Run workflow**
 
-Optional:
-- `WATCHLIST` (default already includes AAPL, MSFT, SPY, QQQ, NVDA, BTC/USD, ETH/USD)
-- `MEAN_REVERSION_ELIGIBLE`
-- `GEMINI_API_KEY` (recommended – you have Gemini Pro)
+The bot will also run automatically every ~6 hours.
 
-3. Share your Google Sheet  
-   → **Anyone with the link can view** (required for the dashboard)
+---
 
-4. Run via GitHub Actions  
-   Actions → Trading Bot → Run workflow
+## Dashboard
 
-## Dashboard (Recommended: Netlify)
-
-The dashboard is now **pure client-side**. No backend needed.
-
-### Deploy to Netlify (free & best)
-
-1. Go to [netlify.com](https://netlify.com) and connect this GitHub repo
+### Best option: Netlify (free)
+1. Connect this repository to Netlify
 2. Set publish directory to `dashboard`
 3. Deploy
 4. Open the site → paste your Google Sheet ID → Load
 
-You can also just open `dashboard/index.html` locally.
+### Alternative
+Just open `dashboard/index.html` in a browser and paste the Sheet ID.
 
-## Important Notes for India
+---
 
-- Keep **PAPER_MODE=true**. Alpaca paper trading works fully for Indian residents.
-- Live trading for individual Indian accounts still has restrictions (Alpaca is expanding via GIFT City).
+## Important Notes for India Users
+
+- Keep **`PAPER_MODE=true`**. This is the correct and safe setting.
+- Alpaca paper trading works fully for Indian residents.
+- Live trading for individual Indian accounts still has restrictions.
 - Crypto pairs (`BTC/USD`, `ETH/USD`) work in paper mode.
-- This setup is excellent for strategy development and learning.
+
+---
+
+## How Continuous Running Works
+
+1. Bot runs for ~5.5–5.8 hours (safe under GitHub’s 6-hour limit)
+2. Saves final equity + positions to Google Sheets
+3. Exits cleanly
+4. Next scheduled run starts, loads previous equity history, and continues with the same open positions from Alpaca
+
+This gives you effectively continuous paper trading for free.
+
+---
 
 ## Architecture
 
 ```
 bot/
-├── agents/          # Individual specialized agents
-├── consensus.py     # Regime-aware voting + Gemini veto
-├── risk.py          # Position sizing + risk checks
-├── execution.py     # Order submission with retries
-├── broker.py        # Alpaca client
-├── sheets.py        # Google Sheets logging
-└── main.py          # Main loop
+├── agents/               # Specialized trading agents
+├── consensus.py          # Regime-aware voting + Gemini veto
+├── risk.py               # Position sizing + risk checks + trailing helpers
+├── execution.py          # Order submission with retries
+├── broker.py             # Alpaca client
+├── sheets.py             # Google Sheets (state + logging)
+└── main.py               # Main continuous loop
+
+dashboard/
+└── index.html            # Pure client-side dashboard
 ```
-
-## Next Improvements (optional)
-
-- Trailing stops
-- More Freqtrade-inspired strategies
-- Simple backtester
-- Telegram notifications
 
 ---
 
-**Stay in paper mode until the strategies prove themselves over weeks of data.**
+## Recommended Usage
+
+1. Run in paper mode for several weeks
+2. Watch the dashboard and the Trades / Equity tabs
+3. Only consider live trading after you have clear positive edge and understand the risks
+
+**This is a paper-trading system. Trading involves risk of loss.**
