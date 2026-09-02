@@ -11,7 +11,6 @@ def get_env_var(name, default=None, required=True):
         sys.exit(1)
     if isinstance(val, str):
         val = val.strip()
-        # Treat empty string as missing so defaults can apply
         if val == "" and default is not None:
             val = default
     return val
@@ -48,7 +47,8 @@ MAX_DRAWDOWN_PCT = float(get_env_var("MAX_DRAWDOWN_PCT", "0.08", required=False)
 GEMINI_API_KEY = get_env_var("GEMINI_API_KEY", required=False)
 GEMINI_MODEL = get_env_var("GEMINI_MODEL", default="gemini-2.0-flash", required=False)
 
-MIN_SIGNAL_CONFIDENCE = float(get_env_var("MIN_SIGNAL_CONFIDENCE", "0.55", required=False))
+# 0.32 allows selective paper trades when a few agents agree; still rejects pure noise
+MIN_SIGNAL_CONFIDENCE = float(get_env_var("MIN_SIGNAL_CONFIDENCE", "0.32", required=False))
 MAX_POSITION_PCT = float(get_env_var("MAX_POSITION_PCT", "0.18", required=False))
 MAX_PORTFOLIO_EXPOSURE = float(get_env_var("MAX_PORTFOLIO_EXPOSURE", "0.75", required=False))
 MAX_POSITIONS = int(get_env_var("MAX_POSITIONS", "8", required=False))
