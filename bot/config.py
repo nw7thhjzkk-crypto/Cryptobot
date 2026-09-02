@@ -45,9 +45,12 @@ MAX_TOTAL_RISK_PCT = float(get_env_var("MAX_TOTAL_RISK_PCT", "0.05", required=Fa
 MAX_DRAWDOWN_PCT = float(get_env_var("MAX_DRAWDOWN_PCT", "0.08", required=False))
 
 GEMINI_API_KEY = get_env_var("GEMINI_API_KEY", required=False)
-GEMINI_MODEL = get_env_var("GEMINI_MODEL", default="gemini-2.0-flash", required=False)
+_raw_gemini_model = get_env_var("GEMINI_MODEL", default="gemini-3.6-flash", required=False)
+if not _raw_gemini_model or _raw_gemini_model in ("gemini-2.0-flash", "gemini-1.5-flash", "gemini-pro"):
+    GEMINI_MODEL = "gemini-3.6-flash"
+else:
+    GEMINI_MODEL = _raw_gemini_model
 
-# 0.32 allows selective paper trades when a few agents agree; still rejects pure noise
 MIN_SIGNAL_CONFIDENCE = float(get_env_var("MIN_SIGNAL_CONFIDENCE", "0.32", required=False))
 MAX_POSITION_PCT = float(get_env_var("MAX_POSITION_PCT", "0.18", required=False))
 MAX_PORTFOLIO_EXPOSURE = float(get_env_var("MAX_PORTFOLIO_EXPOSURE", "0.75", required=False))
