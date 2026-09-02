@@ -23,7 +23,8 @@ GOOGLE_SHEET_ID = get_env_var("GOOGLE_SHEET_ID")
 _paper_mode_raw = str(get_env_var("PAPER_MODE", "true", required=False)).lower()
 PAPER_MODE = _paper_mode_raw not in ("false", "0", "f", "no")
 
-_DEFAULT_WATCHLIST = "AAPL,MSFT,SPY,QQQ,NVDA,BTC/USD,ETH/USD"
+# Crypto-only (24/7 markets — fills without waiting for US stock hours)
+_DEFAULT_WATCHLIST = "BTC/USD,ETH/USD,SOL/USD,AVAX/USD,LINK/USD,DOGE/USD"
 _watchlist_raw = get_env_var("WATCHLIST", _DEFAULT_WATCHLIST, required=False)
 if not _watchlist_raw:
     _watchlist_raw = _DEFAULT_WATCHLIST
@@ -31,7 +32,8 @@ WATCHLIST = [s.strip() for s in str(_watchlist_raw).split(",") if s.strip()]
 if not WATCHLIST:
     WATCHLIST = [s.strip() for s in _DEFAULT_WATCHLIST.split(",") if s.strip()]
 
-_DEFAULT_MR = "SPY,QQQ,AAPL"
+# Mean-reversion eligible crypto pairs
+_DEFAULT_MR = "BTC/USD,ETH/USD,SOL/USD"
 _mr_raw = get_env_var("MEAN_REVERSION_ELIGIBLE", _DEFAULT_MR, required=False)
 if not _mr_raw:
     _mr_raw = _DEFAULT_MR
@@ -40,9 +42,9 @@ MEAN_REVERSION_ELIGIBLE = [s.strip() for s in str(_mr_raw).split(",") if s.strip
 POLL_INTERVAL_SECONDS = int(get_env_var("POLL_INTERVAL_SECONDS", "90", required=False))
 LOOP_MAX_MINUTES = int(get_env_var("LOOP_MAX_MINUTES", "350", required=False))
 
-RISK_PER_TRADE_PCT = float(get_env_var("RISK_PER_TRADE_PCT", "0.008", required=False))
-MAX_TOTAL_RISK_PCT = float(get_env_var("MAX_TOTAL_RISK_PCT", "0.05", required=False))
-MAX_DRAWDOWN_PCT = float(get_env_var("MAX_DRAWDOWN_PCT", "0.08", required=False))
+RISK_PER_TRADE_PCT = float(get_env_var("RISK_PER_TRADE_PCT", "0.01", required=False))
+MAX_TOTAL_RISK_PCT = float(get_env_var("MAX_TOTAL_RISK_PCT", "0.08", required=False))
+MAX_DRAWDOWN_PCT = float(get_env_var("MAX_DRAWDOWN_PCT", "0.10", required=False))
 
 GEMINI_API_KEY = get_env_var("GEMINI_API_KEY", required=False)
 _raw_gemini_model = get_env_var("GEMINI_MODEL", default="gemini-3.6-flash", required=False)
@@ -52,7 +54,7 @@ else:
     GEMINI_MODEL = _raw_gemini_model
 
 MIN_SIGNAL_CONFIDENCE = float(get_env_var("MIN_SIGNAL_CONFIDENCE", "0.32", required=False))
-MAX_POSITION_PCT = float(get_env_var("MAX_POSITION_PCT", "0.18", required=False))
-MAX_PORTFOLIO_EXPOSURE = float(get_env_var("MAX_PORTFOLIO_EXPOSURE", "0.75", required=False))
-MAX_POSITIONS = int(get_env_var("MAX_POSITIONS", "8", required=False))
-COOLDOWN_MINUTES = int(get_env_var("COOLDOWN_MINUTES", "720", required=False))
+MAX_POSITION_PCT = float(get_env_var("MAX_POSITION_PCT", "0.20", required=False))
+MAX_PORTFOLIO_EXPOSURE = float(get_env_var("MAX_PORTFOLIO_EXPOSURE", "0.80", required=False))
+MAX_POSITIONS = int(get_env_var("MAX_POSITIONS", "6", required=False))
+COOLDOWN_MINUTES = int(get_env_var("COOLDOWN_MINUTES", "360", required=False))
