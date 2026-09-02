@@ -21,25 +21,39 @@ logger.info(
 )
 
 trading_client = TradingClient(ALPACA_API_KEY, ALPACA_SECRET_KEY, paper=PAPER_MODE)
-
-# Free paper accounts cannot use SIP feed. Use IEX (free) for stocks.
 stock_data_client = StockHistoricalDataClient(ALPACA_API_KEY, ALPACA_SECRET_KEY)
 crypto_data_client = CryptoHistoricalDataClient(ALPACA_API_KEY, ALPACA_SECRET_KEY)
 
 
 def _is_crypto(symbol: str) -> bool:
     s = symbol.upper().replace("-", "/")
-    return "/" in s or s.endswith("USD") and any(
-        s.startswith(c) for c in ("BTC", "ETH", "SOL", "DOGE", "AVAX", "LINK", "DOT")
+    return "/" in s or (
+        s.endswith("USD")
+        and any(s.startswith(c) for c in ("BTC", "ETH", "SOL", "DOGE", "AVAX", "LINK", "DOT"))
     )
 
 
 def _normalize_crypto(symbol: str) -> str:
-    """Alpaca crypto symbols use BTC/USD form."""
     s = symbol.upper().replace("-", "/")
     if "/" not in s and s.endswith("USD"):
         s = s[:-3] + "/USD"
     return s
+
+
+def _normalize_bars_df(df):
+    """Flatten multi-index and lowercase OHLC column names."""
+    if df is None or df.empty:
+        return df
+    if hasattr(df.index, "names") and df.index.nlevels > 1:
+        df = df.reset_index(level=0, drop=True)
+    rename = {}
+    for c in df.columns:
+        cl = str(c).lower()
+        if cl in ("open", "high", "low", "close", "volume", "trade_count", "vwap"):
+            rename[c] = cl
+    if rename:
+        df = df.rename(columns=rename)
+    return df
 
 
 def get_latest_price(symbol: str):
@@ -52,7 +66,7 @@ def get_latest_price(symbol: str):
 
         req = StockLatestTradeRequest(
             symbol_or_symbols=[symbol],
-            feed=DataFeed.IEX,  # free tier
+            feed=DataFeed.IEX,
         )
         res = stock_data_client.get_stock_latest_trade(req)
         return {"success": True, "price": float(res[symbol].price)}
@@ -61,15 +75,10 @@ def get_latest_price(symbol: str):
         return {"success": False, "reason": str(e)}
 
 
-def get_price_history(symbol: str, lookback_days: int = 100):
-    """
-    Daily bars for indicators.
-    Stocks use IEX feed (available on free Alpaca paper).
-    Crypto uses crypto bars endpoint.
-    """
+def get_price_history(symbol: str, lookback_days: int = 250):
     try:
         end = datetime.utcnow()
-        start = end - timedelta(days=lookback_days + 5)  # buffer for weekends
+        start = end - timedelta(days=lookback_days + 10)
 
         if _is_crypto(symbol):
             sym = _normalize_crypto(symbol)
@@ -80,11 +89,7 @@ def get_price_history(symbol: str, lookback_days: int = 100):
                 end=end,
             )
             bars = crypto_data_client.get_crypto_bars(req)
-            df = bars.df
-            if df is not None and not df.empty:
-                # Flatten multi-index if present
-                if hasattr(df.index, "names") and df.index.nlevels > 1:
-                    df = df.reset_index(level=0, drop=True)
+            df = _normalize_bars_df(bars.df)
             return {"success": True, "data": df}
 
         req = StockBarsRequest(
@@ -92,13 +97,10 @@ def get_price_history(symbol: str, lookback_days: int = 100):
             timeframe=TimeFrame.Day,
             start=start,
             end=end,
-            feed=DataFeed.IEX,  # critical: free paper accounts cannot use SIP
+            feed=DataFeed.IEX,
         )
         bars = stock_data_client.get_stock_bars(req)
-        df = bars.df
-        if df is not None and not df.empty:
-            if hasattr(df.index, "names") and df.index.nlevels > 1:
-                df = df.reset_index(level=0, drop=True)
+        df = _normalize_bars_df(bars.df)
         return {"success": True, "data": df}
     except Exception as e:
         logger.error(f"Error fetching price history for {symbol}: {e}")
@@ -108,7 +110,6 @@ def get_price_history(symbol: str, lookback_days: int = 100):
 def submit_market_order(symbol: str, qty, side: str):
     try:
         order_side = OrderSide.BUY if side.lower() == "buy" else OrderSide.SELL
-        # Crypto often needs GTC; stocks use DAY
         tif = TimeInForce.GTC if _is_crypto(symbol) else TimeInForce.DAY
         sym = _normalize_crypto(symbol) if _is_crypto(symbol) else symbol
 
@@ -129,11 +130,8 @@ def get_account():
     try:
         actual_url = trading_client._base_url if hasattr(trading_client, "_base_url") else "Unknown"
         logger.info(f"Using Alpaca base URL: {actual_url}")
-
         key_str = str(ALPACA_API_KEY) if ALPACA_API_KEY else ""
-        key_preview = key_str[:4] if len(key_str) >= 4 else "None"
-        logger.info(f"API Key starts with: {key_preview}, length: {len(key_str)}")
-
+        logger.info(f"API Key starts with: {key_str[:4] if len(key_str) >= 4 else 'None'}, length: {len(key_str)}")
         acct = trading_client.get_account()
         return {
             "success": True,
