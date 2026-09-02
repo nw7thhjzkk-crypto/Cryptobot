@@ -37,11 +37,14 @@ from bot.strategy import calculate_atr
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
+# Crypto-first: relative strength vs BTC (not SPY)
+BENCHMARK_SYMBOL = "BTC/USD"
+
 def main_loop():
     logger.info("Initializing Google Sheets tabs...")
     init_tabs()
 
-    logger.info(f"WATCHLIST ({len(WATCHLIST)} symbols): {WATCHLIST}")
+    logger.info(f"CRYPTO MODE — WATCHLIST ({len(WATCHLIST)} symbols): {WATCHLIST}")
     if not WATCHLIST:
         logger.error("WATCHLIST is empty — nothing will be traded.")
 
@@ -72,7 +75,7 @@ def main_loop():
     total_orders_submitted = 0
     total_errors = 0
 
-    logger.info(f"Starting continuous paper trading loop (max {LOOP_MAX_MINUTES} min)")
+    logger.info(f"Starting continuous CRYPTO paper trading loop (max {LOOP_MAX_MINUTES} min)")
 
     while True:
         elapsed = time.time() - start_time
@@ -103,7 +106,6 @@ def main_loop():
             open_positions = pos_res.get("positions", []) if pos_res["success"] else []
             held_symbols = {p["symbol"].upper().replace("-", "/") for p in open_positions}
 
-            # Sync equity + positions every iteration so dashboard stays live
             log_equity([now_str, equity, cash, buying_power])
             if pos_res["success"]:
                 pos_rows = [
@@ -121,7 +123,7 @@ def main_loop():
             if breaker_active:
                 logger.warning("Drawdown breaker active. Halting new entries this iteration.")
 
-            bench_res = get_price_history("SPY", lookback_days=250)
+            bench_res = get_price_history(BENCHMARK_SYMBOL, lookback_days=250)
             benchmark_df = bench_res["data"] if bench_res["success"] else None
 
             watchlist_updates = []
@@ -149,7 +151,11 @@ def main_loop():
                     quant_signals = []
                     for agent in quant_agents:
                         if isinstance(agent, RelativeStrengthAgent):
-                            sig = agent.analyze(symbol, df, benchmark_history=benchmark_df)
+                            # Skip RS for the benchmark itself
+                            if symbol.upper().replace("-", "/") == BENCHMARK_SYMBOL:
+                                sig = agent._create_hold_signal(symbol, "Benchmark asset — RS not applied")
+                            else:
+                                sig = agent.analyze(symbol, df, benchmark_history=benchmark_df)
                         else:
                             sig = agent.analyze(symbol, df)
                         quant_signals.append(sig)
@@ -182,9 +188,12 @@ def main_loop():
                         logger.info(f"Skipping BUY for {symbol} due to drawdown breaker")
                         continue
 
-                    # Already holding → don't spam more BUYs
                     sym_key = symbol.upper().replace("-", "/")
-                    if proposed_signal == "BUY" and (sym_key in held_symbols or symbol.upper() in held_symbols):
+                    # Alpaca crypto positions often show as BTCUSD without slash
+                    alt_key = sym_key.replace("/", "")
+                    if proposed_signal == "BUY" and (
+                        sym_key in held_symbols or symbol.upper() in held_symbols or alt_key in held_symbols
+                    ):
                         logger.info(f"Already holding {symbol}, skip additional BUY")
                         continue
 
@@ -199,14 +208,24 @@ def main_loop():
                         atr_s = calculate_atr(df, length=14)
                         atr = float(atr_s.iloc[-1]) if (atr_s is not None and not atr_s.empty) else (current_price * 0.05)
                         qty = calculate_position_size(equity, atr, RISK_PER_TRADE_PCT)
+                        # Crypto can use fractional qty; keep at least small size
+                        if qty <= 0:
+                            # For expensive coins, allow fractional via notional-style sizing
+                            dollar_risk = equity * RISK_PER_TRADE_PCT
+                            qty = max(round(dollar_risk / max(atr * 2, current_price * 0.02), 6), 0)
                         if qty <= 0:
                             continue
-                        new_risk = qty * (2.0 * atr)
+                        new_risk = float(qty) * (2.0 * atr)
                         if not check_portfolio_risk(open_positions, new_risk, MAX_TOTAL_RISK_PCT, equity):
                             logger.info(f"Portfolio total risk exceeded, skipping buy for {symbol}")
                             continue
                     else:
-                        existing_pos = next((p for p in open_positions if p["symbol"].upper() in (symbol.upper(), sym_key)), None)
+                        existing_pos = next(
+                            (p for p in open_positions
+                             if p["symbol"].upper().replace("-", "/") in (symbol.upper(), sym_key, alt_key)
+                             or p["symbol"].upper().replace("/", "") == alt_key),
+                            None
+                        )
                         qty = existing_pos["qty"] if existing_pos else 0
                         if qty <= 0:
                             continue
@@ -222,7 +241,6 @@ def main_loop():
 
                     order_res = execution_engine.execute_order(symbol, proposed_signal, qty)
 
-                    # Only log real submissions, not duplicate-cache skips
                     if not order_res.get("success") and "Duplicate" in str(order_res.get("reason", "")):
                         logger.info(f"Skipped duplicate order for {symbol}")
                         continue
@@ -232,7 +250,6 @@ def main_loop():
                     order_id = order_res.get("order_id", "none")
                     reason = order_res.get("reason", "")
 
-                    # Trades columns: timestamp,symbol,side,qty,price,order_id,status,regime,sleeve,notes
                     log_trade([
                         now_str, symbol, proposed_signal, qty, current_price,
                         order_id, status, regime_str, "multi-agent", reason
@@ -274,5 +291,5 @@ def main_loop():
     logger.info(f"Run {run_id} finished cleanly.")
 
 if __name__ == "__main__":
-    logger.info("Starting Multi-Agent Paper Trading Bot (Continuous Design)")
+    logger.info("Starting Multi-Agent CRYPTO Paper Trading Bot")
     main_loop()
