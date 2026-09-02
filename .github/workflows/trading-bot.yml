@@ -2,18 +2,16 @@ name: Trading Bot
 
 on:
   schedule:
-    # Every 5 hours 50 min so there is a small buffer before the 6h hard limit
     - cron: '50 */6 * * *'
-  workflow_dispatch: # Manual trigger
+  workflow_dispatch:
 
 concurrency:
   group: trading-bot
-  cancel-in-progress: false   # Never kill a running bot mid-loop
+  cancel-in-progress: false
 
 jobs:
   run-bot:
     runs-on: ubuntu-latest
-    # 350 minutes = safe under GitHub's ~6 hour job limit
     timeout-minutes: 350
 
     steps:
@@ -38,8 +36,9 @@ jobs:
         GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
         GOOGLE_SHEET_ID: ${{ secrets.GOOGLE_SHEET_ID }}
         PAPER_MODE: ${{ secrets.PAPER_MODE }}
-        WATCHLIST: ${{ secrets.WATCHLIST }}
-        MEAN_REVERSION_ELIGIBLE: ${{ secrets.MEAN_REVERSION_ELIGIBLE }}
         GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        # WATCHLIST intentionally not set from secrets — empty secret was
+        # overriding defaults and processing 0 symbols. Defaults live in bot/config.py:
+        # AAPL,MSFT,SPY,QQQ,NVDA,BTC/USD,ETH/USD
       run: |
         python -m bot.main
