@@ -43,10 +43,10 @@ def main_loop():
 
     logger.info(f"WATCHLIST ({len(WATCHLIST)} symbols): {WATCHLIST}")
     if not WATCHLIST:
-        logger.error("WATCHLIST is empty — nothing will be traded. Check GitHub secret or config defaults.")
+        logger.error("WATCHLIST is empty — nothing will be traded.")
 
     equity_history = load_recent_equity(max_rows=120)
-    logger.info(f"Loaded {len(equity_history)} previous equity points from Sheets for continuous state")
+    logger.info(f"Loaded {len(equity_history)} previous equity points from Sheets")
 
     run_id = str(uuid.uuid4())[:8]
     run_started_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -77,12 +77,13 @@ def main_loop():
     while True:
         elapsed = time.time() - start_time
         if elapsed > max_seconds:
-            logger.info("Time budget reached. Exiting cleanly so next scheduled run can continue.")
+            logger.info("Time budget reached. Exiting cleanly.")
             break
 
         try:
             iteration += 1
             logger.info(f"--- Iteration {iteration} ---")
+            now_str = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
             acct_res = get_account()
             if not acct_res["success"]:
@@ -95,22 +96,26 @@ def main_loop():
             cash = acct_res["cash"]
             buying_power = acct_res["buying_power"]
             equity_history.append(equity)
-
             if len(equity_history) > 200:
                 equity_history = equity_history[-150:]
 
             pos_res = get_positions()
             open_positions = pos_res.get("positions", []) if pos_res["success"] else []
+            held_symbols = {p["symbol"].upper().replace("-", "/") for p in open_positions}
 
-            if iteration == 1 or iteration % 8 == 0:
-                now_str = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-                log_equity([now_str, equity, cash, buying_power])
-                if pos_res["success"]:
-                    pos_rows = [
-                        [now_str, p['symbol'], p['qty'], p['avg_entry_price'], p['current_price'], p['unrealized_pl']]
-                        for p in open_positions
-                    ]
-                    update_positions(pos_rows)
+            # Sync equity + positions every iteration so dashboard stays live
+            log_equity([now_str, equity, cash, buying_power])
+            if pos_res["success"]:
+                pos_rows = [
+                    [now_str, p["symbol"], p["qty"], p["avg_entry_price"], p["current_price"], p["unrealized_pl"]]
+                    for p in open_positions
+                ]
+                update_positions(pos_rows)
+
+            logger.info(
+                f"Account equity=${equity:.2f} cash=${cash:.2f} bp=${buying_power:.2f} "
+                f"positions={len(open_positions)}"
+            )
 
             breaker_active = check_drawdown_breaker(equity_history, MAX_DRAWDOWN_PCT)
             if breaker_active:
@@ -120,7 +125,6 @@ def main_loop():
             benchmark_df = bench_res["data"] if bench_res["success"] else None
 
             watchlist_updates = []
-            now_str = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
             for symbol in WATCHLIST:
                 try:
@@ -164,8 +168,8 @@ def main_loop():
 
                     log_agent_signal([
                         now_str, symbol, "Consensus", proposed_signal,
-                        consensus_result['score'], consensus_result['confidence'],
-                        consensus_result['reason'], regime_str,
+                        consensus_result["score"], consensus_result["confidence"],
+                        consensus_result["reason"], regime_str,
                         proposed_signal, "", ""
                     ])
 
@@ -178,6 +182,12 @@ def main_loop():
                         logger.info(f"Skipping BUY for {symbol} due to drawdown breaker")
                         continue
 
+                    # Already holding → don't spam more BUYs
+                    sym_key = symbol.upper().replace("-", "/")
+                    if proposed_signal == "BUY" and (sym_key in held_symbols or symbol.upper() in held_symbols):
+                        logger.info(f"Already holding {symbol}, skip additional BUY")
+                        continue
+
                     portfolio_eval = portfolio_engine.evaluate(
                         symbol, proposed_signal, open_positions, current_price, equity
                     )
@@ -188,17 +198,15 @@ def main_loop():
                     if proposed_signal == "BUY":
                         atr_s = calculate_atr(df, length=14)
                         atr = float(atr_s.iloc[-1]) if (atr_s is not None and not atr_s.empty) else (current_price * 0.05)
-
                         qty = calculate_position_size(equity, atr, RISK_PER_TRADE_PCT)
                         if qty <= 0:
                             continue
-
                         new_risk = qty * (2.0 * atr)
                         if not check_portfolio_risk(open_positions, new_risk, MAX_TOTAL_RISK_PCT, equity):
                             logger.info(f"Portfolio total risk exceeded, skipping buy for {symbol}")
                             continue
                     else:
-                        existing_pos = next((p for p in open_positions if p['symbol'] == symbol), None)
+                        existing_pos = next((p for p in open_positions if p["symbol"].upper() in (symbol.upper(), sym_key)), None)
                         qty = existing_pos["qty"] if existing_pos else 0
                         if qty <= 0:
                             continue
@@ -206,7 +214,6 @@ def main_loop():
                     risk_eval = risk_engine.evaluate_order(
                         symbol, proposed_signal, qty, current_price, equity, buying_power
                     )
-
                     if not risk_eval["approved"]:
                         logger.warning(f"Risk rejected {proposed_signal} for {symbol}: {risk_eval['reason']}")
                         continue
@@ -214,12 +221,18 @@ def main_loop():
                     logger.info(f"Symbol: {symbol} | Regime: {regime_str} | Action: {proposed_signal} | Qty: {qty}")
 
                     order_res = execution_engine.execute_order(symbol, proposed_signal, qty)
-                    total_orders_submitted += 1
 
-                    status = order_res.get("status", "failed")
+                    # Only log real submissions, not duplicate-cache skips
+                    if not order_res.get("success") and "Duplicate" in str(order_res.get("reason", "")):
+                        logger.info(f"Skipped duplicate order for {symbol}")
+                        continue
+
+                    total_orders_submitted += 1
+                    status = order_res.get("status", "failed" if not order_res.get("success") else "submitted")
                     order_id = order_res.get("order_id", "none")
                     reason = order_res.get("reason", "")
 
+                    # Trades columns: timestamp,symbol,side,qty,price,order_id,status,regime,sleeve,notes
                     log_trade([
                         now_str, symbol, proposed_signal, qty, current_price,
                         order_id, status, regime_str, "multi-agent", reason
@@ -246,7 +259,7 @@ def main_loop():
             pos = get_positions()
             if pos["success"]:
                 pos_rows = [
-                    [now_str, p['symbol'], p['qty'], p['avg_entry_price'], p['current_price'], p['unrealized_pl']]
+                    [now_str, p["symbol"], p["qty"], p["avg_entry_price"], p["current_price"], p["unrealized_pl"]]
                     for p in pos.get("positions", [])
                 ]
                 update_positions(pos_rows)
@@ -258,7 +271,7 @@ def main_loop():
         run_id, run_started_at, run_finished_at, "completed",
         total_symbols_processed, total_orders_submitted, total_errors
     ])
-    logger.info(f"Run {run_id} finished cleanly. Next scheduled run will continue from current state.")
+    logger.info(f"Run {run_id} finished cleanly.")
 
 if __name__ == "__main__":
     logger.info("Starting Multi-Agent Paper Trading Bot (Continuous Design)")
