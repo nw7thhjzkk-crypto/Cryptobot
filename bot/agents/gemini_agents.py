@@ -10,6 +10,9 @@ logger = logging.getLogger(__name__)
 
 gemini_cache = {}
 
+# Prefer env model; fall back to current available flash model
+DEFAULT_GEMINI_MODEL = "gemini-3.6-flash"
+
 class GeminiContextAgent(BaseAgent):
     def __init__(self):
         super().__init__("GeminiContextAgent")
@@ -28,21 +31,25 @@ class GeminiContextAgent(BaseAgent):
         if len(price_history) < 10:
             return self._create_hold_signal(symbol, "Insufficient data for LLM analysis")
 
-        # Simple cache keyed by symbol + last bar timestamp
         last_date = str(price_history.index[-1])
         cache_key = f"{symbol}_{last_date}"
         if cache_key in gemini_cache:
             return gemini_cache[cache_key]
 
         df = price_history.copy()
-        recent = df.tail(8)
+        # normalize columns
+        rename = {c: str(c).lower() for c in df.columns if str(c).lower() in ("open", "high", "low", "close", "volume")}
+        if rename:
+            df = df.rename(columns=rename)
+        if "close" not in df.columns:
+            return self._create_hold_signal(symbol, "Missing close column")
 
-        # Compact summary for the prompt
+        recent = df.tail(8)
         price_summary = {
             "last_close": float(recent["close"].iloc[-1]),
             "change_5d_pct": float((recent["close"].iloc[-1] / recent["close"].iloc[0] - 1) * 100) if len(recent) > 1 else 0,
-            "high_8d": float(recent["high"].max()),
-            "low_8d": float(recent["low"].min()),
+            "high_8d": float(recent["high"].max()) if "high" in recent.columns else float(recent["close"].max()),
+            "low_8d": float(recent["low"].min()) if "low" in recent.columns else float(recent["close"].min()),
         }
 
         quant_summary = []
@@ -76,8 +83,13 @@ Return ONLY valid JSON with this exact schema (no markdown):
 }}
 """
 
+        model_name = GEMINI_MODEL or DEFAULT_GEMINI_MODEL
+        # Migrate retired model names
+        if model_name in ("gemini-2.0-flash", "gemini-1.5-flash", "gemini-pro"):
+            model_name = DEFAULT_GEMINI_MODEL
+
         try:
-            model = genai.GenerativeModel(GEMINI_MODEL or "gemini-2.0-flash")
+            model = genai.GenerativeModel(model_name)
             response = model.generate_content(
                 prompt,
                 generation_config={"response_mime_type": "application/json"}
@@ -112,4 +124,4 @@ Return ONLY valid JSON with this exact schema (no markdown):
 
         except Exception as e:
             logger.error(f"Gemini API failure for {symbol}: {e}")
-            return self._create_hold_signal(symbol, f"Gemini error: {str(e)[:60]}")
+            return self._create_hold_signal(symbol, f"Gemini error: {str(e)[:80]}")
