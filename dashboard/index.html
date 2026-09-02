@@ -6,188 +6,116 @@
   <title>Dr DHL · Multi-Agent Trading</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script src="https://unpkg.com/lucide@latest"></script>
   <style>
-    :root { --gold: #b45309; --gold-light: #f59e0b; }
-    body { background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%); color: #0f172a; font-family: ui-sans-serif, system-ui, sans-serif; }
-    .card { background: #fff; border-radius: 1rem; border: 1px solid #e2e8f0; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
+    body { background: linear-gradient(180deg,#f8fafc,#f1f5f9); color:#0f172a; font-family:system-ui,sans-serif; }
+    .card { background:#fff; border-radius:1rem; border:1px solid #e2e8f0; box-shadow:0 1px 3px rgba(0,0,0,.06); }
     .pulse-dot { animation: pulse 1.5s ease-in-out infinite; }
-    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
-    .agent-chip { font-size: 10px; letter-spacing: .04em; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.35} }
   </style>
 </head>
-<body class="min-h-screen p-4 md:p-6 lg:p-8">
+<body class="min-h-screen p-4 md:p-6">
 
-  <!-- Header -->
-  <header class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
-    <div class="flex items-center gap-3">
-      <img src="monogram.png" alt="Dr DHL" class="w-12 h-12 object-contain" onerror="this.style.display='none'">
-      <div>
-        <h1 class="text-2xl font-bold tracking-tight">Dr DHL</h1>
-        <p class="text-sm text-slate-500">8 specialized agents · paper trading · live sheet sync</p>
-      </div>
-    </div>
-    <div class="flex items-center gap-2 flex-wrap">
-      <span id="auto-badge" class="text-xs px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">Auto-refresh 30s</span>
-      <input id="sheet-id-input" type="text" class="border border-slate-300 rounded-lg px-3 py-2 text-sm w-56 md:w-72 focus:ring-2 focus:ring-amber-600 outline-none" placeholder="Sheet ID">
-      <button onclick="manualLoad()" class="bg-amber-700 hover:bg-amber-800 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2">
-        <i data-lucide="refresh-cw" class="w-4 h-4"></i> Refresh
-      </button>
-    </div>
-  </header>
-
-  <!-- KPI row -->
-  <div class="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-5">
-    <div class="card p-4">
-      <div class="text-xs font-semibold text-slate-500 uppercase mb-1">Cash</div>
-      <div id="cash-balance" class="text-xl font-bold">$0</div>
-    </div>
-    <div class="card p-4">
-      <div class="text-xs font-semibold text-slate-500 uppercase mb-1">Buying Power</div>
-      <div id="buying-power" class="text-xl font-bold">$0</div>
-    </div>
-    <div class="card p-4">
-      <div class="text-xs font-semibold text-slate-500 uppercase mb-1">Equity</div>
-      <div id="equity-val" class="text-xl font-bold">$0</div>
-    </div>
-    <div class="card p-4">
-      <div class="text-xs font-semibold text-slate-500 uppercase mb-1">Deployed</div>
-      <div id="capital-deployed-pct" class="text-xl font-bold">0%</div>
-    </div>
-    <div class="card p-4">
-      <div class="text-xs font-semibold text-slate-500 uppercase mb-1">Bot Status</div>
-      <div class="flex items-center gap-2 mt-1">
-        <span id="status-indicator" class="w-2.5 h-2.5 rounded-full bg-slate-300"></span>
-        <span id="bot-status-text" class="font-semibold text-slate-600">Connecting…</span>
-      </div>
-      <div id="last-update-text" class="text-[11px] text-slate-400 mt-1">—</div>
+<header class="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 mb-5">
+  <div class="flex items-center gap-3">
+    <img src="monogram.png" alt="Dr DHL" class="w-11 h-11 object-contain" onerror="this.style.display='none'">
+    <div>
+      <h1 class="text-xl font-bold">Dr DHL</h1>
+      <p class="text-xs text-slate-500">Multi-agent paper trading · live sync</p>
     </div>
   </div>
+  <div class="flex items-center gap-2 flex-wrap">
+    <span class="text-[11px] px-2 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">Auto 30s</span>
+    <input id="sheet-id-input" type="text" class="border border-slate-300 rounded-lg px-3 py-1.5 text-sm w-52 focus:ring-2 focus:ring-amber-600 outline-none" placeholder="Sheet ID">
+    <button onclick="manualLoad()" class="bg-amber-700 hover:bg-amber-800 text-white px-3 py-1.5 rounded-lg text-sm font-medium">Refresh</button>
+  </div>
+</header>
 
-  <!-- Agents strip -->
-  <div class="card p-4 mb-5">
-    <div class="flex items-center justify-between mb-3">
-      <h2 class="text-sm font-semibold text-slate-700 flex items-center gap-2">
-        <span class="w-1 h-4 bg-amber-600 rounded"></span> Specialized Agents
-      </h2>
-      <span class="text-xs text-slate-400">each votes independently → consensus</span>
+<!-- KPIs -->
+<div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-4">
+  <div class="card p-3"><div class="text-[10px] font-semibold text-slate-500 uppercase">Cash</div><div id="cash-balance" class="text-lg font-bold">$0</div></div>
+  <div class="card p-3"><div class="text-[10px] font-semibold text-slate-500 uppercase">Buying Power</div><div id="buying-power" class="text-lg font-bold">$0</div></div>
+  <div class="card p-3"><div class="text-[10px] font-semibold text-slate-500 uppercase">Equity</div><div id="equity-val" class="text-lg font-bold">$0</div></div>
+  <div class="card p-3"><div class="text-[10px] font-semibold text-slate-500 uppercase">Unrealized P&L</div><div id="unrealized-pnl" class="text-lg font-bold">$0</div></div>
+  <div class="card p-3"><div class="text-[10px] font-semibold text-slate-500 uppercase">Deployed</div><div id="capital-deployed-pct" class="text-lg font-bold">0%</div></div>
+  <div class="card p-3">
+    <div class="text-[10px] font-semibold text-slate-500 uppercase">Bot</div>
+    <div class="flex items-center gap-1.5 mt-0.5">
+      <span id="status-indicator" class="w-2 h-2 rounded-full bg-slate-300"></span>
+      <span id="bot-status-text" class="text-sm font-semibold text-slate-600">…</span>
     </div>
-    <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2" id="agents-strip">
-      <div class="agent-chip rounded-lg border border-slate-200 bg-slate-50 px-2 py-2 text-center"><div class="font-semibold text-slate-700">Trend</div><div class="text-slate-400">EMA + MACD</div></div>
-      <div class="agent-chip rounded-lg border border-slate-200 bg-slate-50 px-2 py-2 text-center"><div class="font-semibold text-slate-700">Momentum</div><div class="text-slate-400">ROC + RSI</div></div>
-      <div class="agent-chip rounded-lg border border-slate-200 bg-slate-50 px-2 py-2 text-center"><div class="font-semibold text-slate-700">Mean Rev</div><div class="text-slate-400">BB + RSI</div></div>
-      <div class="agent-chip rounded-lg border border-slate-200 bg-slate-50 px-2 py-2 text-center"><div class="font-semibold text-slate-700">Breakout</div><div class="text-slate-400">Range + Vol</div></div>
-      <div class="agent-chip rounded-lg border border-slate-200 bg-slate-50 px-2 py-2 text-center"><div class="font-semibold text-slate-700">Volatility</div><div class="text-slate-400">ATR regime</div></div>
-      <div class="agent-chip rounded-lg border border-slate-200 bg-slate-50 px-2 py-2 text-center"><div class="font-semibold text-slate-700">Volume</div><div class="text-slate-400">Rel volume</div></div>
-      <div class="agent-chip rounded-lg border border-slate-200 bg-slate-50 px-2 py-2 text-center"><div class="font-semibold text-slate-700">Rel Strength</div><div class="text-slate-400">vs SPY</div></div>
-      <div class="agent-chip rounded-lg border border-slate-200 bg-slate-50 px-2 py-2 text-center"><div class="font-semibold text-slate-700">Gemini</div><div class="text-slate-400">Context AI</div></div>
+    <div id="last-update-text" class="text-[10px] text-slate-400 mt-0.5">—</div>
+  </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-4 mb-4">
+  <!-- Compact equity -->
+  <div class="card p-3 lg:col-span-4">
+    <div class="text-xs font-semibold text-slate-700 mb-2">Equity</div>
+    <div class="h-36"><canvas id="equityChart"></canvas></div>
+  </div>
+  <!-- Positions -->
+  <div class="card p-3 lg:col-span-4">
+    <div class="text-xs font-semibold text-slate-700 mb-2">Active Positions <span id="pos-count" class="text-slate-400 font-normal"></span></div>
+    <div id="positions-container" class="space-y-2 max-h-40 overflow-y-auto text-sm">
+      <div class="text-slate-400 text-center py-4 text-xs">No filled positions yet</div>
     </div>
   </div>
-
-  <div class="grid grid-cols-1 lg:grid-cols-3 gap-5 mb-5">
-    <!-- Equity chart -->
-    <div class="card p-4 lg:col-span-2">
-      <h2 class="text-sm font-semibold text-slate-700 mb-3 flex items-center gap-2">
-        <span class="w-1 h-4 bg-amber-600 rounded"></span> Equity Curve
-      </h2>
-      <div class="h-64"><canvas id="equityChart"></canvas></div>
-    </div>
-
-    <!-- Watchlist + Positions -->
-    <div class="flex flex-col gap-5">
-      <div class="card p-4 flex-1">
-        <h2 class="text-sm font-semibold text-slate-700 mb-3 flex items-center gap-2">
-          <span class="w-1 h-4 bg-amber-600 rounded"></span> Watchlist Regime
-        </h2>
-        <div id="watchlist-container" class="space-y-2 max-h-52 overflow-y-auto text-sm">
-          <div class="text-slate-400 text-center py-6">Loading…</div>
-        </div>
-      </div>
-      <div class="card p-4 flex-1">
-        <h2 class="text-sm font-semibold text-slate-700 mb-3 flex items-center gap-2">
-          <span class="w-1 h-4 bg-amber-600 rounded"></span> Active Positions
-        </h2>
-        <div id="positions-container" class="space-y-2 max-h-40 overflow-y-auto text-sm">
-          <div class="text-slate-400 text-center py-6">No positions</div>
-        </div>
-      </div>
+  <!-- Watchlist -->
+  <div class="card p-3 lg:col-span-4">
+    <div class="text-xs font-semibold text-slate-700 mb-2">Watchlist Regime</div>
+    <div id="watchlist-container" class="space-y-1.5 max-h-40 overflow-y-auto text-sm">
+      <div class="text-slate-400 text-center py-4 text-xs">Loading…</div>
     </div>
   </div>
+</div>
 
-  <!-- Agent Signals live feed -->
-  <div class="card p-4 mb-5">
-    <h2 class="text-sm font-semibold text-slate-700 mb-3 flex items-center justify-between">
-      <span class="flex items-center gap-2"><span class="w-1 h-4 bg-amber-600 rounded"></span> Live Agent Consensus</span>
-      <span class="text-xs font-normal text-slate-400">latest votes from multi-agent engine</span>
-    </h2>
-    <div class="overflow-x-auto">
-      <table class="w-full text-sm">
-        <thead class="text-xs uppercase text-slate-500 border-b bg-slate-50">
-          <tr>
-            <th class="px-3 py-2 text-left">Time</th>
-            <th class="px-3 py-2 text-left">Symbol</th>
-            <th class="px-3 py-2 text-left">Signal</th>
-            <th class="px-3 py-2 text-left">Score</th>
-            <th class="px-3 py-2 text-left">Conf</th>
-            <th class="px-3 py-2 text-left">Regime</th>
-            <th class="px-3 py-2 text-left">Reason</th>
-          </tr>
-        </thead>
-        <tbody id="signals-tbody">
-          <tr><td colspan="7" class="text-center py-6 text-slate-400">Waiting for signals…</td></tr>
-        </tbody>
-      </table>
-    </div>
+<!-- Note -->
+<div class="card p-3 mb-4 text-xs text-slate-600 bg-amber-50 border-amber-100">
+  <strong>Paper orders:</strong> Buying power drops when orders are submitted. Positions & equity update after US market hours fill (09:30–16:00 ET). Pending orders are normal outside market hours.
+</div>
+
+<!-- Signals -->
+<div class="card p-3 mb-4">
+  <div class="text-xs font-semibold text-slate-700 mb-2">Live Agent Consensus</div>
+  <div class="overflow-x-auto">
+    <table class="w-full text-xs">
+      <thead class="text-[10px] uppercase text-slate-500 border-b bg-slate-50">
+        <tr><th class="px-2 py-1.5 text-left">Time</th><th class="px-2 py-1.5 text-left">Symbol</th><th class="px-2 py-1.5 text-left">Signal</th><th class="px-2 py-1.5 text-left">Conf</th><th class="px-2 py-1.5 text-left">Regime</th><th class="px-2 py-1.5 text-left">Reason</th></tr>
+      </thead>
+      <tbody id="signals-tbody"></tbody>
+    </table>
   </div>
+</div>
 
-  <!-- Trades -->
-  <div class="card p-4 mb-8">
-    <h2 class="text-sm font-semibold text-slate-700 mb-3 flex items-center gap-2">
-      <span class="w-1 h-4 bg-amber-600 rounded"></span> Recent Trades
-    </h2>
-    <div class="overflow-x-auto">
-      <table class="w-full text-sm">
-        <thead class="text-xs uppercase text-slate-500 border-b bg-slate-50">
-          <tr>
-            <th class="px-3 py-2 text-left">Time</th>
-            <th class="px-3 py-2 text-left">Symbol</th>
-            <th class="px-3 py-2 text-left">Side</th>
-            <th class="px-3 py-2 text-left">Qty</th>
-            <th class="px-3 py-2 text-left">Price</th>
-            <th class="px-3 py-2 text-left">Regime</th>
-            <th class="px-3 py-2 text-left">Status</th>
-          </tr>
-        </thead>
-        <tbody id="trades-tbody">
-          <tr><td colspan="7" class="text-center py-6 text-slate-400">No trades yet — waiting for strong consensus</td></tr>
-        </tbody>
-      </table>
-    </div>
+<!-- Trades -->
+<div class="card p-3 mb-6">
+  <div class="text-xs font-semibold text-slate-700 mb-2">Orders / Trades</div>
+  <div class="overflow-x-auto">
+    <table class="w-full text-xs">
+      <thead class="text-[10px] uppercase text-slate-500 border-b bg-slate-50">
+        <tr><th class="px-2 py-1.5 text-left">Time</th><th class="px-2 py-1.5 text-left">Symbol</th><th class="px-2 py-1.5 text-left">Side</th><th class="px-2 py-1.5 text-left">Qty</th><th class="px-2 py-1.5 text-left">Price</th><th class="px-2 py-1.5 text-left">Status</th><th class="px-2 py-1.5 text-left">Regime</th></tr>
+      </thead>
+      <tbody id="trades-tbody"></tbody>
+    </table>
   </div>
+</div>
 
-  <footer class="text-center text-xs text-slate-400 pb-6">
-    Dr DHL · Multi-Agent Paper Trading · Not financial advice · Data from your Google Sheet
-  </footer>
+<footer class="text-center text-[10px] text-slate-400 pb-4">Dr DHL · Multi-Agent Paper Trading · Not financial advice</footer>
 
 <script>
-lucide.createIcons();
 const DEFAULT_SHEET = '10V2-woF0jMHxlnBANWp2aqcrL7laMXCWN_38ztDmK4g';
 let equityChartInstance = null;
-let refreshTimer = null;
 
 document.addEventListener('DOMContentLoaded', () => {
   const saved = localStorage.getItem('tradingBotSheetId') || DEFAULT_SHEET;
   document.getElementById('sheet-id-input').value = saved;
   loadData(saved);
-  refreshTimer = setInterval(() => {
-    const id = document.getElementById('sheet-id-input').value.trim() || DEFAULT_SHEET;
-    loadData(id, true);
-  }, 30000);
+  setInterval(() => loadData(document.getElementById('sheet-id-input').value.trim() || DEFAULT_SHEET, true), 30000);
 });
 
 function manualLoad() {
   const id = document.getElementById('sheet-id-input').value.trim();
-  if (!id) { alert('Enter Sheet ID'); return; }
+  if (!id) return alert('Enter Sheet ID');
   localStorage.setItem('tradingBotSheetId', id);
   loadData(id);
 }
@@ -195,7 +123,7 @@ function manualLoad() {
 async function fetchSheetCsv(sheetId, sheetName) {
   const url = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(sheetName)}`;
   const res = await fetch(url);
-  if (!res.ok) throw new Error(`${sheetName} ${res.status}`);
+  if (!res.ok) throw new Error(sheetName + ' ' + res.status);
   return parseCsv(await res.text());
 }
 
@@ -203,27 +131,22 @@ function parseCsv(text) {
   const lines = text.trim().split('\n');
   if (lines.length < 2) return [];
   const headers = lines[0].split(',').map(h => h.replace(/^"|"$/g, '').trim().toLowerCase().replace(/\s+/g, '_'));
-  const rows = [];
-  for (let i = 1; i < lines.length; i++) {
-    const values = lines[i].match(/(".*?"|[^,]+)(?=,|$)/g) || [];
+  return lines.slice(1).map(line => {
+    const values = line.match(/(".*?"|[^,]+)(?=,|$)/g) || [];
     const obj = {};
-    headers.forEach((h, idx) => {
-      obj[h] = (values[idx] || '').replace(/^"|"$/g, '').trim();
-    });
-    rows.push(obj);
-  }
-  return rows;
+    headers.forEach((h, i) => { obj[h] = (values[i] || '').replace(/^"|"$/g, '').trim(); });
+    // also keep raw positional for mis-headered Trades sheet
+    obj._raw = values.map(v => (v || '').replace(/^"|"$/g, '').trim());
+    return obj;
+  });
 }
 
 function money(n) {
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(parseFloat(n) || 0);
+  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(+n || 0);
 }
 
-async function loadData(sheetId, silent = false) {
+async function loadData(sheetId, silent) {
   try {
-    if (!silent) {
-      document.getElementById('bot-status-text').textContent = 'Loading…';
-    }
     const [equity, positions, trades, watchlist, signals] = await Promise.all([
       fetchSheetCsv(sheetId, 'Equity').catch(() => []),
       fetchSheetCsv(sheetId, 'Positions').catch(() => []),
@@ -234,83 +157,64 @@ async function loadData(sheetId, silent = false) {
 
     if (equity.length) {
       const latest = equity[equity.length - 1];
-      const cash = parseFloat(latest.cash) || 0;
-      const eq = parseFloat(latest.equity) || 0;
-      const bp = parseFloat(latest.buying_power) || 0;
+      const cash = +latest.cash || 0, eq = +latest.equity || 0, bp = +latest.buying_power || 0;
       document.getElementById('cash-balance').textContent = money(cash);
       document.getElementById('buying-power').textContent = money(bp);
       document.getElementById('equity-val').textContent = money(eq);
-      document.getElementById('capital-deployed-pct').textContent =
-        eq > 0 ? (((eq - cash) / eq) * 100).toFixed(1) + '%' : '0%';
+      document.getElementById('capital-deployed-pct').textContent = eq > 0 ? (((eq - cash) / eq) * 100).toFixed(1) + '%' : '0%';
       updateBotStatus(latest.timestamp);
       updateChart(equity);
     }
+
+    let totalPnl = 0;
+    positions.forEach(p => { totalPnl += (+p.unrealized_pl || 0); });
+    const pnlEl = document.getElementById('unrealized-pnl');
+    pnlEl.textContent = (totalPnl >= 0 ? '+' : '') + money(totalPnl).replace('$', '$');
+    pnlEl.className = 'text-lg font-bold ' + (totalPnl >= 0 ? 'text-emerald-600' : 'text-red-600');
 
     updateWatchlist(watchlist);
     updatePositions(positions);
     updateTrades(trades);
     updateSignals(signals);
-    lucide.createIcons();
   } catch (e) {
     console.error(e);
     if (!silent) {
       document.getElementById('bot-status-text').textContent = 'Error';
-      document.getElementById('status-indicator').className = 'w-2.5 h-2.5 rounded-full bg-red-500';
+      document.getElementById('status-indicator').className = 'w-2 h-2 rounded-full bg-red-500';
     }
   }
 }
 
 function updateBotStatus(ts) {
+  if (!ts) return;
+  document.getElementById('last-update-text').textContent = ts.replace('T', ' ').replace('Z', ' UTC');
+  const mins = (Date.now() - new Date(ts).getTime()) / 60000;
   const el = document.getElementById('bot-status-text');
   const dot = document.getElementById('status-indicator');
-  const lu = document.getElementById('last-update-text');
-  if (!ts) return;
-  lu.textContent = 'Last update: ' + ts.replace('T', ' ').replace('Z', ' UTC');
-  const mins = (Date.now() - new Date(ts).getTime()) / 60000;
-  if (mins < 15) {
-    el.textContent = 'Running';
-    el.className = 'font-semibold text-emerald-600';
-    dot.className = 'w-2.5 h-2.5 rounded-full bg-emerald-500 pulse-dot';
-  } else if (mins < 40) {
-    el.textContent = 'Active';
-    el.className = 'font-semibold text-amber-600';
-    dot.className = 'w-2.5 h-2.5 rounded-full bg-amber-400';
-  } else {
-    el.textContent = 'Idle';
-    el.className = 'font-semibold text-slate-500';
-    dot.className = 'w-2.5 h-2.5 rounded-full bg-slate-300';
-  }
+  if (mins < 15) { el.textContent = 'Running'; el.className = 'text-sm font-semibold text-emerald-600'; dot.className = 'w-2 h-2 rounded-full bg-emerald-500 pulse-dot'; }
+  else if (mins < 40) { el.textContent = 'Active'; el.className = 'text-sm font-semibold text-amber-600'; dot.className = 'w-2 h-2 rounded-full bg-amber-400'; }
+  else { el.textContent = 'Idle'; el.className = 'text-sm font-semibold text-slate-500'; dot.className = 'w-2 h-2 rounded-full bg-slate-300'; }
 }
 
 function updateChart(data) {
-  const labels = data.map(d => {
-    if (!d.timestamp) return '';
-    const dt = new Date(d.timestamp);
-    return dt.getHours().toString().padStart(2,'0') + ':' + dt.getMinutes().toString().padStart(2,'0');
-  });
-  const values = data.map(d => parseFloat(d.equity) || 0);
+  const labels = data.map(d => { const dt = new Date(d.timestamp); return isNaN(dt) ? '' : dt.getHours().toString().padStart(2,'0') + ':' + dt.getMinutes().toString().padStart(2,'0'); });
+  const values = data.map(d => +d.equity || 0);
   const ctx = document.getElementById('equityChart').getContext('2d');
   if (equityChartInstance) equityChartInstance.destroy();
-  const g = ctx.createLinearGradient(0, 0, 0, 280);
-  g.addColorStop(0, 'rgba(180,83,9,0.18)');
-  g.addColorStop(1, 'rgba(180,83,9,0)');
+  const g = ctx.createLinearGradient(0,0,0,140);
+  g.addColorStop(0, 'rgba(180,83,9,0.2)'); g.addColorStop(1, 'rgba(180,83,9,0)');
   equityChartInstance = new Chart(ctx, {
     type: 'line',
-    data: { labels, datasets: [{ data: values, borderColor: '#b45309', backgroundColor: g, borderWidth: 2.5, pointRadius: 0, fill: true, tension: 0.2 }] },
-    options: {
-      responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { display: false } },
-      scales: {
-        x: { grid: { display: false }, ticks: { maxTicksLimit: 8, color: '#94a3b8' } },
-        y: { grid: { color: '#e2e8f0' }, ticks: { color: '#94a3b8', callback: v => '$' + v } }
-      }
-    }
+    data: { labels, datasets: [{ data: values, borderColor: '#b45309', backgroundColor: g, borderWidth: 2, pointRadius: 0, fill: true, tension: 0.2 }] },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } },
+      scales: { x: { grid: { display: false }, ticks: { maxTicksLimit: 5, color: '#94a3b8', font: { size: 10 } } },
+                y: { grid: { color: '#e2e8f0' }, ticks: { color: '#94a3b8', font: { size: 10 }, callback: v => '$' + v } } } }
   });
 }
 
 function updateWatchlist(data) {
   const c = document.getElementById('watchlist-container');
-  if (!data.length) { c.innerHTML = '<div class="text-slate-400 text-center py-6">Empty</div>'; return; }
+  if (!data.length) { c.innerHTML = '<div class="text-slate-400 text-center py-4 text-xs">Empty</div>'; return; }
   c.innerHTML = data.map(item => {
     const r = (item.regime || '').toLowerCase();
     let color = 'text-slate-500';
@@ -318,49 +222,90 @@ function updateWatchlist(data) {
     else if (r.includes('bear') || r.includes('risk')) color = 'text-red-600';
     else if (r.includes('ranging')) color = 'text-blue-600';
     else if (r.includes('trend')) color = 'text-amber-600';
-    return `<div class="flex justify-between border-b border-slate-100 pb-2"><span class="font-medium">${item.symbol}</span><span class="${color} text-xs font-semibold uppercase">${item.regime || '-'}</span></div>`;
+    return `<div class="flex justify-between border-b border-slate-100 pb-1"><span class="font-medium">${item.symbol}</span><span class="${color} text-[10px] font-semibold uppercase">${item.regime||'-'}</span></div>`;
   }).join('');
 }
 
 function updatePositions(data) {
   const c = document.getElementById('positions-container');
-  if (!data.length) { c.innerHTML = '<div class="text-slate-400 text-center py-6">No active positions</div>'; return; }
+  document.getElementById('pos-count').textContent = data.length ? `(${data.length})` : '';
+  if (!data.length) { c.innerHTML = '<div class="text-slate-400 text-center py-4 text-xs">No filled positions yet<br><span class="text-[10px]">Orders fill during US market hours</span></div>'; return; }
   c.innerHTML = data.map(p => {
-    const pnl = parseFloat(p.unrealized_pl) || 0;
+    const pnl = +p.unrealized_pl || 0;
     const col = pnl >= 0 ? 'text-emerald-600' : 'text-red-600';
-    return `<div class="flex justify-between border-b border-slate-100 pb-2"><div><div class="font-semibold">${p.symbol}</div><div class="text-xs text-slate-500">${p.qty} @ $${parseFloat(p.avg_entry_price||0).toFixed(2)}</div></div><div class="text-right ${col} font-medium">${pnl>=0?'+':''}$${pnl.toFixed(2)}</div></div>`;
+    return `<div class="flex justify-between border-b border-slate-100 pb-1.5"><div><div class="font-semibold">${p.symbol}</div><div class="text-[10px] text-slate-500">${p.qty} @ $${(+p.avg_entry_price||0).toFixed(2)}</div></div><div class="text-right ${col} font-medium">${pnl>=0?'+':''}$${pnl.toFixed(2)}<div class="text-[10px] text-slate-500">$${(+p.current_price||0).toFixed(2)}</div></div></div>`;
   }).join('');
+}
+
+function normalizeTrade(t) {
+  // Correct schema: timestamp,symbol,side,qty,price,order_id,status,regime,sleeve,notes
+  // Old/wrong headers may map order_id→regime, status→sleeve, regime→status
+  const raw = t._raw || [];
+  let status = t.status || '';
+  let regime = t.regime || '';
+  // If status looks like a regime name and regime looks like uuid/none → swapped
+  if (/trending|ranging|sideways|risk|unknown/i.test(status) && (regime === 'none' || /^[0-9a-f-]{8,}$/i.test(regime) || !regime)) {
+    regime = status;
+    status = t.sleeve || t.order_id || 'submitted';
+  }
+  // Prefer raw positions if available
+  if (raw.length >= 8) {
+    // [ts,sym,side,qty,price,order_id,status,regime,...]
+    status = raw[6] || status;
+    regime = raw[7] || regime;
+  }
+  return {
+    timestamp: t.timestamp,
+    symbol: t.symbol,
+    side: t.side,
+    qty: t.qty,
+    price: t.price,
+    status,
+    regime
+  };
 }
 
 function updateTrades(data) {
   const tbody = document.getElementById('trades-tbody');
   if (!data.length) {
-    tbody.innerHTML = '<tr><td colspan="7" class="text-center py-6 text-slate-400">No trades yet — waiting for strong consensus</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="7" class="text-center py-4 text-slate-400">No orders yet</td></tr>';
     return;
   }
-  tbody.innerHTML = [...data].reverse().slice(0, 15).map(t => {
+  // Deduplicate by symbol+side+qty+status (show unique submissions)
+  const seen = new Set();
+  const unique = [];
+  for (const row of [...data].reverse()) {
+    const t = normalizeTrade(row);
+    if ((t.status || '').toLowerCase() === 'failed' && /duplicate/i.test(row.notes || '')) continue;
+    const key = `${t.symbol}|${t.side}|${t.qty}|${t.status}`;
+    if (seen.has(key) && t.status !== 'pending_new') continue;
+    seen.add(key);
+    unique.push(t);
+    if (unique.length >= 20) break;
+  }
+  tbody.innerHTML = unique.map(t => {
     const sideCol = (t.side || '').toLowerCase() === 'buy' ? 'text-emerald-600' : 'text-red-600';
     const time = t.timestamp ? t.timestamp.replace('T',' ').replace('Z','') : '';
-    return `<tr class="border-b border-slate-100 hover:bg-slate-50"><td class="px-3 py-2 text-slate-500">${time}</td><td class="px-3 py-2 font-medium">${t.symbol}</td><td class="px-3 py-2 ${sideCol} font-semibold uppercase">${t.side}</td><td class="px-3 py-2">${t.qty}</td><td class="px-3 py-2">$${parseFloat(t.price||0).toFixed(2)}</td><td class="px-3 py-2 text-xs">${t.regime||'-'}</td><td class="px-3 py-2 capitalize">${t.status||'-'}</td></tr>`;
+    const st = (t.status || '-').replace('pending_new', 'pending');
+    return `<tr class="border-b border-slate-100"><td class="px-2 py-1.5 text-slate-500 whitespace-nowrap">${time}</td><td class="px-2 py-1.5 font-medium">${t.symbol}</td><td class="px-2 py-1.5 ${sideCol} font-semibold uppercase">${t.side}</td><td class="px-2 py-1.5">${t.qty}</td><td class="px-2 py-1.5">$${(+t.price||0).toFixed(2)}</td><td class="px-2 py-1.5 capitalize">${st}</td><td class="px-2 py-1.5 text-[10px] uppercase">${t.regime||'-'}</td></tr>`;
   }).join('');
 }
 
 function updateSignals(data) {
   const tbody = document.getElementById('signals-tbody');
   if (!data.length) {
-    tbody.innerHTML = '<tr><td colspan="7" class="text-center py-6 text-slate-400">Waiting for signals…</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-slate-400">Waiting…</td></tr>';
     return;
   }
-  tbody.innerHTML = [...data].reverse().slice(0, 20).map(s => {
+  tbody.innerHTML = [...data].reverse().slice(0, 15).map(s => {
     const sig = (s.signal || s.consensus || 'HOLD').toUpperCase();
     let col = 'text-slate-500';
     if (sig === 'BUY') col = 'text-emerald-600';
     if (sig === 'SELL') col = 'text-red-600';
     const time = s.timestamp ? s.timestamp.replace('T',' ').replace('Z','') : '';
-    const conf = parseFloat(s.confidence || 0);
-    const score = parseFloat(s.score || 0);
-    const reason = (s.reason || '').slice(0, 90);
-    return `<tr class="border-b border-slate-100 hover:bg-slate-50"><td class="px-3 py-2 text-slate-500 whitespace-nowrap">${time}</td><td class="px-3 py-2 font-medium">${s.symbol}</td><td class="px-3 py-2 ${col} font-semibold">${sig}</td><td class="px-3 py-2">${score.toFixed(2)}</td><td class="px-3 py-2">${(conf*100).toFixed(0)}%</td><td class="px-3 py-2 text-xs uppercase">${s.regime||'-'}</td><td class="px-3 py-2 text-xs text-slate-500 max-w-md truncate" title="${(s.reason||'').replace(/"/g,'')}">${reason}</td></tr>`;
+    const conf = ((+s.confidence || 0) * 100).toFixed(0);
+    const reason = (s.reason || '').slice(0, 70);
+    return `<tr class="border-b border-slate-100"><td class="px-2 py-1.5 text-slate-500 whitespace-nowrap">${time}</td><td class="px-2 py-1.5 font-medium">${s.symbol}</td><td class="px-2 py-1.5 ${col} font-semibold">${sig}</td><td class="px-2 py-1.5">${conf}%</td><td class="px-2 py-1.5 text-[10px] uppercase">${s.regime||'-'}</td><td class="px-2 py-1.5 text-slate-500 max-w-xs truncate">${reason}</td></tr>`;
   }).join('');
 }
 </script>
