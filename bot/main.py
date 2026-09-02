@@ -41,9 +41,10 @@ def main_loop():
     logger.info("Initializing Google Sheets tabs...")
     init_tabs()
 
-    # === Continuous design ===
-    # Load recent equity history from previous runs so drawdown breaker
-    # works across the 6-hour GitHub Actions boundary.
+    logger.info(f"WATCHLIST ({len(WATCHLIST)} symbols): {WATCHLIST}")
+    if not WATCHLIST:
+        logger.error("WATCHLIST is empty — nothing will be traded. Check GitHub secret or config defaults.")
+
     equity_history = load_recent_equity(max_rows=120)
     logger.info(f"Loaded {len(equity_history)} previous equity points from Sheets for continuous state")
 
@@ -95,14 +96,12 @@ def main_loop():
             buying_power = acct_res["buying_power"]
             equity_history.append(equity)
 
-            # Keep equity history from growing forever in memory
             if len(equity_history) > 200:
                 equity_history = equity_history[-150:]
 
             pos_res = get_positions()
             open_positions = pos_res.get("positions", []) if pos_res["success"] else []
 
-            # Persist equity + positions periodically (and always on first iteration)
             if iteration == 1 or iteration % 8 == 0:
                 now_str = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
                 log_equity([now_str, equity, cash, buying_power])
@@ -198,7 +197,7 @@ def main_loop():
                         if not check_portfolio_risk(open_positions, new_risk, MAX_TOTAL_RISK_PCT, equity):
                             logger.info(f"Portfolio total risk exceeded, skipping buy for {symbol}")
                             continue
-                    else:  # SELL
+                    else:
                         existing_pos = next((p for p in open_positions if p['symbol'] == symbol), None)
                         qty = existing_pos["qty"] if existing_pos else 0
                         if qty <= 0:
@@ -239,7 +238,6 @@ def main_loop():
 
         time.sleep(POLL_INTERVAL_SECONDS)
 
-    # Final equity + positions snapshot before exit
     try:
         acct = get_account()
         if acct["success"]:
