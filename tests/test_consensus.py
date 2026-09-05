@@ -20,7 +20,7 @@ def test_consensus_engine_risk_off_override():
     quant_signals = [
         {"agent": "TrendAgent", "signal": "BUY", "score": 0.9, "confidence": 0.9, "reason": ""},
     ]
-    regime = {"features": {"regime": "risk-off"}}
+    regime = {"features": {"regime": "risk_off"}}
 
     res = engine.aggregate_signals("AAPL", quant_signals, regime, None)
     assert res["signal"] == "HOLD"

@@ -11,6 +11,8 @@ SCOPES = [
     "https://www.googleapis.com/auth/drive"
 ]
 
+from functools import wraps
+
 def get_client():
     raw_json = GOOGLE_SERVICE_ACCOUNT_JSON
     if raw_json is None:
@@ -42,16 +44,28 @@ def get_sheet(client):
         logger.error(f"Error opening Google Sheet {GOOGLE_SHEET_ID}: {e}")
         return None
 
-def init_tabs():
-    client = get_client()
-    if not client: return
-    sheet = get_sheet(client)
-    if not sheet: return
+def with_sheet(func):
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        try:
+            client = get_client()
+            if not client:
+                return None
+            sheet = get_sheet(client)
+            if not sheet:
+                return None
+            return func(sheet, *args, **kwargs)
+        except Exception as e:
+            logger.error(f"Error in {func.__name__}: {e}")
+            return None
+    return wrapper
 
+@with_sheet
+def init_tabs(sheet):
     tabs_needed = {
         "AgentSignals": ["timestamp", "symbol", "agent", "signal", "score", "confidence", "reason", "regime", "consensus", "risk_decision", "final_decision"],
         "BotRuns": ["run_id", "started_at", "finished_at", "status", "symbols_processed", "orders_submitted", "errors"],
-        "Trades": ["timestamp", "symbol", "side", "qty", "price", "order_id", "status", "regime", "sleeve", "notes"],
+        "Trades": ["timestamp", "symbol", "side", "qty", "price", "order_id", "status", "regime", "primary_agent", "notes"],
         "Positions": ["timestamp", "symbol", "qty", "avg_entry_price", "current_price", "unrealized_pl"],
         "Equity": ["timestamp", "equity", "cash", "buying_power"],
         "Watchlist": ["symbol", "regime", "last_updated"]
@@ -68,116 +82,69 @@ def init_tabs():
             if not ws.row_values(1):
                 ws.append_row(headers)
 
-def load_recent_equity(max_rows: int = 100) -> list:
+@with_sheet
+def load_recent_equity(sheet, max_rows: int = 100) -> list:
     """
     Load the most recent equity values from the Equity tab.
     Used so drawdown breaker works across multiple GitHub Actions runs.
     Returns a list of floats (equity values), oldest → newest.
     """
-    try:
-        client = get_client()
-        if not client:
-            return []
-        sheet = get_sheet(client)
-        if not sheet:
-            return []
-
-        ws = sheet.worksheet("Equity")
-        records = ws.get_all_records()
-        if not records:
-            return []
-
-        # Take the last max_rows
-        recent = records[-max_rows:]
-        equities = []
-        for r in recent:
-            try:
-                eq = float(r.get("equity", 0))
-                if eq > 0:
-                    equities.append(eq)
-            except (TypeError, ValueError):
-                continue
-        return equities
-    except Exception as e:
-        logger.warning(f"Could not load recent equity history: {e}")
+    ws = sheet.worksheet("Equity")
+    records = ws.get_all_records()
+    if not records:
         return []
 
-def log_trade(row):
-    try:
-        client = get_client()
-        if not client: return
-        sheet = get_sheet(client)
-        if not sheet: return
+    # Take the last max_rows
+    recent = records[-max_rows:]
+    equities = []
+    for r in recent:
+        try:
+            eq = float(r.get("equity", 0))
+            if eq > 0:
+                equities.append(eq)
+        except (TypeError, ValueError):
+            continue
+    return equities
 
-        ws = sheet.worksheet("Trades")
-        ws.append_row(row)
-    except Exception as e:
-        logger.error(f"Error logging trade to sheets: {e}")
+@with_sheet
+def log_trade(sheet, row):
+    ws = sheet.worksheet("Trades")
+    ws.append_row(row)
 
-def update_positions(rows):
-    try:
-        client = get_client()
-        if not client: return
-        sheet = get_sheet(client)
-        if not sheet: return
+@with_sheet
+def update_positions(sheet, rows):
+    ws = sheet.worksheet("Positions")
+    ws.clear()
+    headers = ["timestamp", "symbol", "qty", "avg_entry_price", "current_price", "unrealized_pl"]
+    data = [headers] + rows
+    ws.update(values=data, range_name="A1")
 
-        ws = sheet.worksheet("Positions")
-        ws.clear()
+@with_sheet
+def log_equity(sheet, row):
+    ws = sheet.worksheet("Equity")
+    ws.append_row(row)
 
-        headers = ["timestamp", "symbol", "qty", "avg_entry_price", "current_price", "unrealized_pl"]
-        data = [headers] + rows
-        ws.update(values=data, range_name="A1")
-    except Exception as e:
-        logger.error(f"Error updating positions in sheets: {e}")
+@with_sheet
+def update_watchlist(sheet, rows):
+    ws = sheet.worksheet("Watchlist")
+    ws.clear()
+    headers = ["symbol", "regime", "last_updated"]
+    data = [headers] + rows
+    ws.update(values=data, range_name="A1")
 
-def log_equity(row):
-    try:
-        client = get_client()
-        if not client: return
-        sheet = get_sheet(client)
-        if not sheet: return
+@with_sheet
+def log_agent_signal(sheet, row_data):
+    ws = sheet.worksheet("AgentSignals")
+    ws.append_row(row_data)
 
-        ws = sheet.worksheet("Equity")
-        ws.append_row(row)
-    except Exception as e:
-        logger.error(f"Error logging equity to sheets: {e}")
+@with_sheet
+def log_agent_signals_batch(sheet, rows_data):
+    if not rows_data:
+        return
+    ws = sheet.worksheet("AgentSignals")
+    ws.append_rows(rows_data)
 
-def update_watchlist(rows):
-    try:
-        client = get_client()
-        if not client: return
-        sheet = get_sheet(client)
-        if not sheet: return
-
-        ws = sheet.worksheet("Watchlist")
-        ws.clear()
-
-        headers = ["symbol", "regime", "last_updated"]
-        data = [headers] + rows
-        ws.update(values=data, range_name="A1")
-    except Exception as e:
-        logger.error(f"Error updating watchlist in sheets: {e}")
-
-def log_agent_signal(row_data):
-    try:
-        client = get_client()
-        if not client: return
-        sheet = get_sheet(client)
-        if not sheet: return
-
-        ws = sheet.worksheet("AgentSignals")
-        ws.append_row(row_data)
-    except Exception as e:
-        logger.error(f"Error logging agent signal to sheets: {e}")
-
-def log_bot_run(row_data):
-    try:
-        client = get_client()
-        if not client: return
-        sheet = get_sheet(client)
-        if not sheet: return
-
-        ws = sheet.worksheet("BotRuns")
-        ws.append_row(row_data)
-    except Exception as e:
-        logger.error(f"Error logging bot run to sheets: {e}")
+@with_sheet
+def log_bot_run(sheet, row_data):
+    ws = sheet.worksheet("BotRuns")
+    ws.append_row(row_data)

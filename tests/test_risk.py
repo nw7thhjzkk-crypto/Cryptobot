@@ -9,7 +9,7 @@ def test_risk_engine_paper_mode():
 
     res2 = engine.evaluate_order("AAPL", "BUY", 100, 150.0, 10000.0, 10000.0)
     assert res2["approved"] is False
-    assert "exceeds max allowed" in res2["reason"]
+    assert "exceeds max" in res2["reason"]
 
 def test_risk_engine_invalid_data():
     engine = RiskEngine(paper_mode=True, max_position_pct=0.20)

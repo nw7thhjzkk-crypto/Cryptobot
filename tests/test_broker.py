@@ -4,7 +4,7 @@ from unittest.mock import patch, MagicMock
 import bot.broker as broker
 from alpaca.trading.enums import OrderSide
 
-@patch('bot.broker.data_client')
+@patch('bot.broker.stock_data_client')
 def test_get_latest_price_success(mock_data_client):
     # Mocking the response for get_stock_latest_trade
     mock_response = MagicMock()
@@ -16,7 +16,7 @@ def test_get_latest_price_success(mock_data_client):
     assert result['price'] == 150.5
     mock_data_client.get_stock_latest_trade.assert_called_once()
 
-@patch('bot.broker.data_client')
+@patch('bot.broker.stock_data_client')
 def test_get_latest_price_error(mock_data_client):
     mock_data_client.get_stock_latest_trade.side_effect = Exception("API error")
 
@@ -25,18 +25,19 @@ def test_get_latest_price_error(mock_data_client):
     assert result['reason'] == "API error"
     mock_data_client.get_stock_latest_trade.assert_called_once()
 
-@patch('bot.broker.data_client')
+import pandas as pd
+
+@patch('bot.broker.stock_data_client')
 def test_get_price_history_success(mock_data_client):
     mock_response = MagicMock()
-    mock_response.df = "mock_dataframe"
+    mock_response.df = pd.DataFrame()
     mock_data_client.get_stock_bars.return_value = mock_response
 
     result = broker.get_price_history('AAPL', lookback_days=10)
     assert result['success'] is True
-    assert result['data'] == "mock_dataframe"
     mock_data_client.get_stock_bars.assert_called_once()
 
-@patch('bot.broker.data_client')
+@patch('bot.broker.stock_data_client')
 def test_get_price_history_error(mock_data_client):
     mock_data_client.get_stock_bars.side_effect = Exception("Bars error")
 

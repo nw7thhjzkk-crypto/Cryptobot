@@ -15,7 +15,10 @@ class ConsensusEngine:
             "VolatilityAgent": 0.7,
             "VolumeAgent": 0.7,
             "RelativeStrengthAgent": 0.9,
-            "GeminiContextAgent": 1.2
+            "GeminiContextAgent": 1.2,
+            "DonchianBreakoutAgent": 1.05,
+            "DualMomentumAgent": 1.1,
+            "RangeExpansionAgent": 0.85
         }
 
     def aggregate_signals(self, symbol: str, quant_signals: List[Dict[str, Any]], regime_signal: Dict[str, Any], gemini_signal: Dict[str, Any] = None) -> Dict[str, Any]:
@@ -41,14 +44,14 @@ class ConsensusEngine:
 
             weight = base_weight
             if "trending_bull" in regime or regime == "trending":
-                if agent_name in ("TrendAgent", "MomentumAgent", "BreakoutAgent", "RelativeStrengthAgent"):
+                if agent_name in ("TrendAgent", "MomentumAgent", "BreakoutAgent", "RelativeStrengthAgent", "DonchianBreakoutAgent", "DualMomentumAgent"):
                     weight *= 1.3
                 if agent_name == "MeanReversionAgent":
                     weight *= 0.35
             elif "ranging" in regime:
                 if agent_name == "MeanReversionAgent":
                     weight *= 1.4
-                if agent_name in ("TrendAgent", "BreakoutAgent"):
+                if agent_name in ("TrendAgent", "BreakoutAgent", "DonchianBreakoutAgent", "DualMomentumAgent"):
                     weight *= 0.5
             elif "risk_off" in regime:
                 weight *= 0.25
@@ -68,7 +71,7 @@ class ConsensusEngine:
             reasons.append(f"{agent_name}({signal}): {sig.get('reason', '')}")
 
         if total_weight == 0 or active_agents == 0:
-            return self._build_result(symbol, "HOLD", 0.0, 0.0, "No active agent signals", regime)
+            return self._build_result(symbol, "HOLD", 0.0, 0.0, "No active agent signals", regime, "none")
 
         consensus_score = total_score / total_weight
 
@@ -115,15 +118,29 @@ class ConsensusEngine:
                 confidence = 0.0
                 reasons.append(f"Gemini veto: {gemini_signal.get('reason', '')}")
 
-        reason_str = " | ".join(reasons) if reasons else "Neutral consensus"
-        return self._build_result(symbol, final_signal, consensus_score, confidence, reason_str, regime)
+        primary_agent = "none"
+        if final_signal != "HOLD":
+            best_agent_score = 0.0
+            for sig in all_signals:
+                if sig.get("signal") == final_signal:
+                    agent_name = sig["agent"]
+                    w = self.weights.get(agent_name, 1.0)
+                    s = float(sig.get("score", 0) or 0)
+                    contribution = abs(s * w)
+                    if contribution > best_agent_score:
+                        best_agent_score = contribution
+                        primary_agent = agent_name
 
-    def _build_result(self, symbol: str, signal: str, score: float, confidence: float, reason: str, regime: str) -> Dict[str, Any]:
+        reason_str = " | ".join(reasons) if reasons else "Neutral consensus"
+        return self._build_result(symbol, final_signal, consensus_score, confidence, reason_str, regime, primary_agent)
+
+    def _build_result(self, symbol: str, signal: str, score: float, confidence: float, reason: str, regime: str, primary_agent: str) -> Dict[str, Any]:
         return {
             "symbol": symbol,
             "signal": signal,
             "score": float(score),
             "confidence": float(confidence),
             "reason": reason,
-            "regime": regime
+            "regime": regime,
+            "primary_agent": primary_agent
         }

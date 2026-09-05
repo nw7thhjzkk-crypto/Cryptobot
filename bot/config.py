@@ -47,9 +47,10 @@ MAX_TOTAL_RISK_PCT = float(get_env_var("MAX_TOTAL_RISK_PCT", "0.08", required=Fa
 MAX_DRAWDOWN_PCT = float(get_env_var("MAX_DRAWDOWN_PCT", "0.10", required=False))
 
 GEMINI_API_KEY = get_env_var("GEMINI_API_KEY", required=False)
-_raw_gemini_model = get_env_var("GEMINI_MODEL", default="gemini-3.6-flash", required=False)
-if not _raw_gemini_model or _raw_gemini_model in ("gemini-2.0-flash", "gemini-1.5-flash", "gemini-pro"):
-    GEMINI_MODEL = "gemini-3.6-flash"
+# Use gemini-1.5-flash as the currently available default model
+_raw_gemini_model = get_env_var("GEMINI_MODEL", default="gemini-1.5-flash", required=False)
+if not _raw_gemini_model or _raw_gemini_model in ("gemini-3.6-flash", "gemini-pro"):
+    GEMINI_MODEL = "gemini-1.5-flash"
 else:
     GEMINI_MODEL = _raw_gemini_model
 

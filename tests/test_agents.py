@@ -7,25 +7,25 @@ from bot.agents.momentum import MomentumAgent
 
 @pytest.fixture
 def mock_bullish_df():
-    prices = [100.0] * 50 + [102.0, 104.0, 106.0, 108.0, 110.0, 112.0, 114.0, 116.0, 118.0, 120.0]
+    prices = [100.0] * 50 + [102.0, 104.0, 106.0, 108.0, 110.0, 112.0, 114.0, 116.0, 118.0, 120.0, 122.0, 124.0, 126.0, 128.0, 130.0, 132.0, 134.0, 136.0, 138.0, 140.0]
     df = pd.DataFrame({
         'close': prices,
         'open': prices,
         'high': [p + 1 for p in prices],
         'low': [p - 1 for p in prices],
-        'volume': [1000] * 60
+        'volume': [1000] * 70
     })
     return df
 
 @pytest.fixture
 def mock_bearish_df():
-    prices = [100.0] * 50 + [98.0, 96.0, 94.0, 92.0, 90.0, 88.0, 86.0, 84.0, 82.0, 80.0]
+    prices = [100.0] * 50 + [98.0, 96.0, 94.0, 92.0, 90.0, 88.0, 86.0, 84.0, 82.0, 80.0, 78.0, 76.0, 74.0, 72.0, 70.0, 68.0, 66.0, 64.0, 62.0, 60.0]
     df = pd.DataFrame({
         'close': prices,
         'open': prices,
         'high': [p + 1 for p in prices],
         'low': [p - 1 for p in prices],
-        'volume': [1000] * 60
+        'volume': [1000] * 70
     })
     return df
 

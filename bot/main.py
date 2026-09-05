@@ -10,12 +10,12 @@ from bot.config import (
     MIN_SIGNAL_CONFIDENCE
 )
 from bot.broker import (
-    get_latest_price, get_price_history,
+    get_latest_price, get_price_history, get_price_history_batch,
     get_account, get_positions
 )
 from bot.sheets import (
     init_tabs, log_trade, update_positions, log_equity,
-    update_watchlist, log_agent_signal, log_bot_run, load_recent_equity
+    update_watchlist, log_agent_signal, log_agent_signals_batch, log_bot_run, load_recent_equity
 )
 
 from bot.agents.trend import TrendAgent
@@ -27,6 +27,9 @@ from bot.agents.volume import VolumeAgent
 from bot.agents.relative_strength import RelativeStrengthAgent
 from bot.agents.market_regime import MarketRegimeAgent
 from bot.agents.gemini_agents import GeminiContextAgent
+from bot.agents.donchian import DonchianBreakoutAgent
+from bot.agents.dual_momentum import DualMomentumAgent
+from bot.agents.range_expansion import RangeExpansionAgent
 
 from bot.consensus import ConsensusEngine
 from bot.portfolio import PortfolioEngine
@@ -61,7 +64,8 @@ def main_loop():
     quant_agents = [
         TrendAgent(), MomentumAgent(), MeanReversionAgent(),
         BreakoutAgent(), VolatilityAgent(), VolumeAgent(),
-        RelativeStrengthAgent()
+        RelativeStrengthAgent(), DonchianBreakoutAgent(),
+        DualMomentumAgent(), RangeExpansionAgent()
     ]
     regime_agent = MarketRegimeAgent()
     gemini_agent = GeminiContextAgent()
@@ -123,21 +127,25 @@ def main_loop():
             if breaker_active:
                 logger.warning("Drawdown breaker active. Halting new entries this iteration.")
 
-            bench_res = get_price_history(BENCHMARK_SYMBOL, lookback_days=250)
-            benchmark_df = bench_res["data"] if bench_res["success"] else None
+            # Batch fetch history for benchmark and watchlist
+            all_symbols = list(set([BENCHMARK_SYMBOL] + WATCHLIST))
+            batch_res = get_price_history_batch(all_symbols, lookback_days=250)
+            batch_data = batch_res.get("data", {}) if batch_res.get("success") else {}
+
+            benchmark_df = batch_data.get(BENCHMARK_SYMBOL)
 
             watchlist_updates = []
+            agent_signals_updates = []
 
             for symbol in WATCHLIST:
                 try:
                     total_symbols_processed += 1
 
-                    hist_res = get_price_history(symbol, lookback_days=250)
-                    if not hist_res["success"] or hist_res["data"] is None or hist_res["data"].empty:
+                    df = batch_data.get(symbol)
+                    if df is None or df.empty:
                         logger.warning(f"Failed to fetch price history for {symbol}")
                         continue
 
-                    df = hist_res["data"]
                     logger.info(f"Fetched {len(df)} bars for {symbol}")
 
                     latest_res = get_latest_price(symbol)
@@ -172,12 +180,13 @@ def main_loop():
                         f"(Score: {consensus_result['score']:.2f}, Conf: {consensus_result['confidence']:.2f})"
                     )
 
-                    log_agent_signal([
-                        now_str, symbol, "Consensus", proposed_signal,
-                        consensus_result["score"], consensus_result["confidence"],
-                        consensus_result["reason"], regime_str,
-                        proposed_signal, "", ""
-                    ])
+                    if proposed_signal != "HOLD" or consensus_result["confidence"] > 0.5:
+                        agent_signals_updates.append([
+                            now_str, symbol, "Consensus", proposed_signal,
+                            consensus_result["score"], consensus_result["confidence"],
+                            consensus_result["reason"], regime_str,
+                            proposed_signal, "", ""
+                        ])
 
                     watchlist_updates.append([symbol, regime_str, now_str])
 
@@ -249,15 +258,19 @@ def main_loop():
                     status = order_res.get("status", "failed" if not order_res.get("success") else "submitted")
                     order_id = order_res.get("order_id", "none")
                     reason = order_res.get("reason", "")
+                    primary_agent = consensus_result.get("primary_agent", "multi-agent")
 
                     log_trade([
                         now_str, symbol, proposed_signal, qty, current_price,
-                        order_id, status, regime_str, "multi-agent", reason
+                        order_id, status, regime_str, primary_agent, reason
                     ])
 
                 except Exception as inner_e:
                     logger.error(f"Error processing {symbol}: {inner_e}", exc_info=True)
                     total_errors += 1
+
+            if agent_signals_updates:
+                log_agent_signals_batch(agent_signals_updates)
 
             if watchlist_updates:
                 update_watchlist(watchlist_updates)
