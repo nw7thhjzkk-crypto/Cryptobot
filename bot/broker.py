@@ -106,6 +106,60 @@ def get_price_history(symbol: str, lookback_days: int = 250):
         logger.error(f"Error fetching price history for {symbol}: {e}")
         return {"success": False, "reason": str(e)}
 
+def get_price_history_batch(symbols: list, lookback_days: int = 250):
+    try:
+        end = datetime.utcnow()
+        start = end - timedelta(days=lookback_days + 10)
+
+        crypto_symbols = [s for s in symbols if _is_crypto(s)]
+        stock_symbols = [s for s in symbols if not _is_crypto(s)]
+
+        results = {}
+
+        if crypto_symbols:
+            norm_crypto = [_normalize_crypto(s) for s in crypto_symbols]
+            req = CryptoBarsRequest(
+                symbol_or_symbols=norm_crypto,
+                timeframe=TimeFrame.Day,
+                start=start,
+                end=end,
+            )
+            bars = crypto_data_client.get_crypto_bars(req)
+            if bars and hasattr(bars, "df") and bars.df is not None and not bars.df.empty:
+                for orig_sym, norm_sym in zip(crypto_symbols, norm_crypto):
+                    if norm_sym in bars.df.index.get_level_values(0):
+                        try:
+                            symbol_df = bars.df.loc[norm_sym].copy()
+                            symbol_df = _normalize_bars_df(symbol_df)
+                            results[orig_sym] = symbol_df
+                        except KeyError:
+                            pass
+
+        if stock_symbols:
+            req = StockBarsRequest(
+                symbol_or_symbols=stock_symbols,
+                timeframe=TimeFrame.Day,
+                start=start,
+                end=end,
+                feed=DataFeed.IEX,
+            )
+            bars = stock_data_client.get_stock_bars(req)
+            if bars and hasattr(bars, "df") and bars.df is not None and not bars.df.empty:
+                for sym in stock_symbols:
+                    if sym in bars.df.index.get_level_values(0):
+                        try:
+                            symbol_df = bars.df.loc[sym].copy()
+                            symbol_df = _normalize_bars_df(symbol_df)
+                            results[sym] = symbol_df
+                        except KeyError:
+                            pass
+
+        return {"success": True, "data": results}
+
+    except Exception as e:
+        logger.error(f"Error fetching batch price history: {e}")
+        return {"success": False, "reason": str(e), "data": {}}
+
 
 def submit_market_order(symbol: str, qty, side: str):
     try:

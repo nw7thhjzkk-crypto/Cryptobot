@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 gemini_cache = {}
 
 # Prefer env model; fall back to current available flash model
-DEFAULT_GEMINI_MODEL = "gemini-3.6-flash"
+DEFAULT_GEMINI_MODEL = "gemini-1.5-flash"
 
 class GeminiContextAgent(BaseAgent):
     def __init__(self):
@@ -84,8 +84,8 @@ Return ONLY valid JSON with this exact schema (no markdown):
 """
 
         model_name = GEMINI_MODEL or DEFAULT_GEMINI_MODEL
-        # Migrate retired model names
-        if model_name in ("gemini-2.0-flash", "gemini-1.5-flash", "gemini-pro"):
+        # Migrate retired or hallucinated model names
+        if model_name in ("gemini-3.6-flash", "gemini-pro"):
             model_name = DEFAULT_GEMINI_MODEL
 
         try:

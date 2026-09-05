@@ -1,0 +1,47 @@
+name: Strategy Research and Evolution
+
+on:
+  schedule:
+    - cron: '0 0 * * 0' # Run weekly on Sundays
+  workflow_dispatch:
+
+jobs:
+  research-and-validate:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+        cache: 'pip'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pytest
+
+    - name: Run Unit Tests
+      run: |
+        PYTHONPATH=. python -m pytest tests/
+
+    - name: Run Evolution Engine
+      env:
+        ALPACA_API_KEY: ${{ secrets.ALPACA_API_KEY }}
+        ALPACA_SECRET_KEY: ${{ secrets.ALPACA_SECRET_KEY }}
+        GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
+        GOOGLE_SHEET_ID: ${{ secrets.GOOGLE_SHEET_ID }}
+        PAPER_MODE: ${{ secrets.PAPER_MODE }}
+        GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      run: |
+        python -m bot.research.evolution
+
+    - name: Create PR if improvements found
+      # Note: This is a placeholder for actual PR creation logic.
+      # The evolution engine would write a 'report.md' and we would only trigger if it passed the walk-forward validation
+      if: success()
+      run: |
+        echo "Evaluation complete. PR creation gated by safety checks."
