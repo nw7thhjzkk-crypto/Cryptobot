@@ -4,7 +4,7 @@ from bot.agents.base import BaseAgent
 
 class DualMomentumAgent(BaseAgent):
     def __init__(self, fast_period: int = 5, mid_period: int = 20, slow_period: int = 60):
-        super().__init__("DualMomentumAgent")
+        super().__init__("DualMomentumAgent", version="1.1", parameters={"fast": fast_period, "mid": mid_period, "slow": slow_period}, regime_compatibility=["trending_bull", "trending_bear"])
         self.fast = fast_period
         self.mid = mid_period
         self.slow = slow_period
@@ -68,6 +68,7 @@ class DualMomentumAgent(BaseAgent):
 
         return {
             "agent": self.name,
+            "version": self.version,
             "symbol": symbol,
             "signal": signal,
             "score": float(score_val),

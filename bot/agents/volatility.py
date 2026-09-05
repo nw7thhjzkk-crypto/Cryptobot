@@ -1,55 +1,48 @@
 import pandas as pd
 from typing import Dict, Any
 from bot.agents.base import BaseAgent
-from bot.strategy import calculate_atr
+from bot.factors import calculate_volatility
 
 class VolatilityAgent(BaseAgent):
     def __init__(self):
-        super().__init__("VolatilityAgent")
+        super().__init__("VolatilityAgent", version="1.1", parameters={"vol_length": 20}, regime_compatibility=["high_volatility", "trending_bull", "trending_bear"])
 
     def analyze(self, symbol: str, price_history: pd.DataFrame, **kwargs) -> Dict[str, Any]:
-        if len(price_history) < 30:
-            return self._create_hold_signal(symbol, "Insufficient data for volatility analysis")
+        if len(price_history) < self.parameters["vol_length"] + 5:
+            return self._create_hold_signal(symbol, "Insufficient data for Volatility Agent")
 
         df = price_history.copy()
-        atr = calculate_atr(df, length=14)
 
-        if atr is None or atr.empty:
-            return self._create_hold_signal(symbol, "Failed to calculate ATR")
+        vol = calculate_volatility(df, length=self.parameters["vol_length"])
 
-        curr_atr = atr.iloc[-1]
-        atr_avg = atr.rolling(window=20).mean().iloc[-1]
+        if vol is None or vol.empty:
+             return self._create_hold_signal(symbol, "Failed to calc volatility")
 
-        ema10 = df['close'].ewm(span=10, adjust=False).mean()
-        curr_close = df['close'].iloc[-1]
+        curr_vol = float(vol.iloc[-1])
+        avg_vol = float(vol.iloc[-self.parameters["vol_length"]:-1].mean())
 
         signal = "HOLD"
         confidence = 0.0
-        reason = "Normal volatility regime"
+        reason = "Normal volatility"
 
-        if curr_atr > atr_avg * 1.5:
-            if curr_close > ema10.iloc[-1]:
-                 signal = "BUY"
-                 confidence = min(0.5 + (curr_atr / atr_avg - 1.5) * 0.5, 0.9)
-                 reason = "High volatility expansion in bullish direction"
-            elif curr_close < ema10.iloc[-1]:
-                 signal = "SELL"
-                 confidence = min(0.5 + (curr_atr / atr_avg - 1.5) * 0.5, 0.9)
-                 reason = "High volatility expansion in bearish direction"
-        elif curr_atr < atr_avg * 0.5:
-             reason = "Volatility contraction, anticipating breakout"
+        vol_ratio = curr_vol / avg_vol if avg_vol > 0 else 1.0
 
-        score = confidence if signal == "BUY" else (-confidence if signal == "SELL" else 0.0)
+        if vol_ratio > 1.5:
+             # Just an example implementation - can be extended
+             signal = "HOLD"
+             confidence = 0.5
+             reason = f"High volatility regime (Ratio: {vol_ratio:.2f})"
 
         return {
             "agent": self.name,
+            "version": self.version,
             "symbol": symbol,
             "signal": signal,
-            "score": score,
+            "score": 0.0,
             "confidence": confidence,
             "reason": reason,
             "features": {
-                "atr_14": float(curr_atr),
-                "atr_avg_20": float(atr_avg)
+                "realized_vol": curr_vol,
+                "vol_ratio": vol_ratio
             }
         }

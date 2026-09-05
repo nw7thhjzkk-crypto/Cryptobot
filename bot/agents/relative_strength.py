@@ -4,13 +4,13 @@ from bot.agents.base import BaseAgent
 
 class RelativeStrengthAgent(BaseAgent):
     def __init__(self):
-        super().__init__("RelativeStrengthAgent")
+        super().__init__("RelativeStrengthAgent", version="1.1", parameters={"lookback": 20}, regime_compatibility=["trending_bull", "trending_bear"])
 
     def analyze(self, symbol: str, price_history: pd.DataFrame, benchmark_history: pd.DataFrame = None, **kwargs) -> Dict[str, Any]:
         if benchmark_history is None or benchmark_history.empty:
             return self._create_hold_signal(symbol, "No benchmark data provided for relative strength")
 
-        lookback = 20
+        lookback = self.parameters["lookback"]
         if len(price_history) < lookback or len(benchmark_history) < lookback:
              return self._create_hold_signal(symbol, "Insufficient data for relative strength analysis")
 
@@ -45,6 +45,7 @@ class RelativeStrengthAgent(BaseAgent):
 
         return {
             "agent": self.name,
+            "version": self.version,
             "symbol": symbol,
             "signal": signal,
             "score": score,

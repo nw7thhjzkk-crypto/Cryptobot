@@ -1,69 +1,55 @@
 import pandas as pd
 from typing import Dict, Any
 from bot.agents.base import BaseAgent
+from bot.factors import calculate_atr
 
 class BreakoutAgent(BaseAgent):
-    def __init__(self):
-        super().__init__("BreakoutAgent")
+    def __init__(self, lookback: int = 20):
+        super().__init__("BreakoutAgent", version="1.1", parameters={"lookback": lookback}, regime_compatibility=["trending_bull", "trending_bear", "ranging"])
+        self.lookback = lookback
 
     def analyze(self, symbol: str, price_history: pd.DataFrame, **kwargs) -> Dict[str, Any]:
-        lookback = 20
-        if len(price_history) < lookback + 5:
-            return self._create_hold_signal(symbol, "Insufficient data for breakout analysis")
+        if len(price_history) < self.lookback + 5:
+            return self._create_hold_signal(symbol, "Insufficient data for Breakout Agent")
 
         df = price_history.copy()
 
-        rolling_high = df['high'].shift(1).rolling(window=lookback).max()
-        rolling_low = df['low'].shift(1).rolling(window=lookback).min()
-        vol_avg = df['volume'].rolling(window=20).mean()
-
-        if rolling_high.empty or rolling_low.empty or vol_avg.empty:
-            return self._create_hold_signal(symbol, "Failed to calculate indicators")
+        recent_high = df['high'].iloc[-self.lookback-1:-1].max()
+        recent_low = df['low'].iloc[-self.lookback-1:-1].min()
 
         curr_close = float(df['close'].iloc[-1])
-        prev_close = float(df['close'].iloc[-2])
         curr_vol = float(df['volume'].iloc[-1])
-        curr_vol_avg = float(vol_avg.iloc[-1])
-
-        curr_high_level = float(rolling_high.iloc[-1])
-        curr_low_level = float(rolling_low.iloc[-1])
-
-        rel_vol = curr_vol / curr_vol_avg if curr_vol_avg > 0 else 1.0
+        avg_vol = df['volume'].iloc[-self.lookback-1:-1].mean()
 
         signal = "HOLD"
         confidence = 0.0
-        reason = "Price within range"
+        reason = "Price within recent range"
 
-        # Bullish breakout
-        if curr_close > curr_high_level and prev_close <= curr_high_level:
-            if rel_vol >= 1.4:
-                signal = "BUY"
-                confidence = min(0.58 + (rel_vol - 1.4) * 0.18, 0.93)
-                reason = f"Breakout above {lookback}-bar high with volume (RVOL {rel_vol:.2f})"
-            else:
-                reason = f"Breakout above high but weak volume (RVOL {rel_vol:.2f})"
+        # Check for volume confirmation
+        vol_multiplier = curr_vol / avg_vol if avg_vol > 0 else 0
 
-        # Bearish breakout
-        elif curr_close < curr_low_level and prev_close >= curr_low_level:
-            if rel_vol >= 1.4:
-                signal = "SELL"
-                confidence = min(0.58 + (rel_vol - 1.4) * 0.18, 0.93)
-                reason = f"Breakdown below {lookback}-bar low with volume (RVOL {rel_vol:.2f})"
-            else:
-                reason = f"Breakdown below low but weak volume (RVOL {rel_vol:.2f})"
+        if curr_close > recent_high:
+            signal = "BUY"
+            confidence = min(0.5 + (vol_multiplier * 0.1), 0.95)
+            reason = f"Breakout above {self.lookback}-bar high with {vol_multiplier:.1f}x volume"
+        elif curr_close < recent_low:
+            signal = "SELL"
+            confidence = min(0.5 + (vol_multiplier * 0.1), 0.95)
+            reason = f"Breakdown below {self.lookback}-bar low with {vol_multiplier:.1f}x volume"
 
         score = confidence if signal == "BUY" else (-confidence if signal == "SELL" else 0.0)
 
         return {
             "agent": self.name,
+            "version": self.version,
             "symbol": symbol,
             "signal": signal,
             "score": float(score),
             "confidence": float(confidence),
             "reason": reason,
             "features": {
-                "rolling_high": curr_high_level,
-                "rolling_low": curr_low_level,
-                "relative_volume": float(rel_vol)
+                "recent_high": float(recent_high),
+                "recent_low": float(recent_low),
+                "vol_multiplier": float(vol_multiplier)
             }
         }

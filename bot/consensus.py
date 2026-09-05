@@ -4,143 +4,139 @@ from typing import List, Dict, Any
 logger = logging.getLogger(__name__)
 
 class ConsensusEngine:
-    def __init__(self, min_confidence: float = 0.5):
-        self.min_confidence = min_confidence
-
-        self.weights = {
-            "TrendAgent": 1.15,
-            "MomentumAgent": 0.95,
-            "MeanReversionAgent": 0.95,
-            "BreakoutAgent": 1.0,
-            "VolatilityAgent": 0.7,
-            "VolumeAgent": 0.7,
-            "RelativeStrengthAgent": 0.9,
-            "GeminiContextAgent": 1.2,
-            "DonchianBreakoutAgent": 1.05,
-            "DualMomentumAgent": 1.1,
-            "RangeExpansionAgent": 0.85
+    def __init__(self, attribution_tracker=None):
+        # We can dynamically adjust strategy weights based on performance if attribution is provided
+        self.attribution_tracker = attribution_tracker
+        self.regime_multipliers = {
+            "trending_bull": {"trend": 1.5, "breakout": 1.5, "momentum": 1.2, "mean_reversion": 0.0},
+            "trending_bear": {"trend": 1.5, "breakout": 1.5, "momentum": 1.2, "mean_reversion": 0.0},
+            "ranging": {"trend": 0.0, "breakout": 0.5, "momentum": 0.5, "mean_reversion": 2.0},
+            "high_volatility": {"trend": 0.5, "breakout": 0.5, "momentum": 0.5, "mean_reversion": 0.5, "volatility": 2.0},
+            "risk_off": {"trend": 0.1, "breakout": 0.1, "momentum": 0.1, "mean_reversion": 0.1},
+            "transitional": {"trend": 1.0, "breakout": 1.0, "momentum": 1.0, "mean_reversion": 1.0},
+            "unknown": {"trend": 1.0, "breakout": 1.0, "momentum": 1.0, "mean_reversion": 1.0}
         }
 
-    def aggregate_signals(self, symbol: str, quant_signals: List[Dict[str, Any]], regime_signal: Dict[str, Any], gemini_signal: Dict[str, Any] = None) -> Dict[str, Any]:
+    def _get_agent_category(self, agent_name: str) -> str:
+        name_lower = agent_name.lower()
+        if "trend" in name_lower or "donchian" in name_lower or "dualmomentum" in name_lower:
+            return "trend"
+        if "breakout" in name_lower or "rangeexpansion" in name_lower:
+            return "breakout"
+        if "reversion" in name_lower:
+            return "mean_reversion"
+        if "volatility" in name_lower:
+            return "volatility"
+        if "momentum" in name_lower or "relativestrength" in name_lower:
+            return "momentum"
+        return "trend"  # default
+
+    def aggregate_signals(
+        self,
+        symbol: str,
+        quant_signals: List[Dict[str, Any]],
+        regime_signal: Dict[str, Any],
+        gemini_signal: Dict[str, Any] = None
+    ) -> Dict[str, Any]:
+
+        regime = regime_signal.get("regime", "unknown")
+        if isinstance(regime_signal.get("features"), dict):
+             regime = regime_signal["features"].get("regime", regime)
+
+        # Fallback for missing/invalid regime
+        if regime not in self.regime_multipliers:
+             regime = "unknown"
+
+        regime_confidence = regime_signal.get("confidence", 0.5)
+
+        multipliers = self.regime_multipliers.get(regime, self.regime_multipliers["unknown"])
 
         total_score = 0.0
         total_weight = 0.0
-        reasons = []
-        buy_votes = 0
-        sell_votes = 0
-        active_agents = 0
+        primary_agent = "none"
+        highest_weighted_score = 0.0
 
-        all_signals = quant_signals.copy()
-        if gemini_signal:
-            all_signals.append(gemini_signal)
-
-        regime = regime_signal.get("features", {}).get("regime", "sideways")
-
-        for sig in all_signals:
-            agent_name = sig["agent"]
-            signal = sig.get("signal", "HOLD")
-            score = float(sig.get("score", 0) or 0)
-            base_weight = self.weights.get(agent_name, 1.0)
-
-            weight = base_weight
-            if "trending_bull" in regime or regime == "trending":
-                if agent_name in ("TrendAgent", "MomentumAgent", "BreakoutAgent", "RelativeStrengthAgent", "DonchianBreakoutAgent", "DualMomentumAgent"):
-                    weight *= 1.3
-                if agent_name == "MeanReversionAgent":
-                    weight *= 0.35
-            elif "ranging" in regime:
-                if agent_name == "MeanReversionAgent":
-                    weight *= 1.4
-                if agent_name in ("TrendAgent", "BreakoutAgent", "DonchianBreakoutAgent", "DualMomentumAgent"):
-                    weight *= 0.5
-            elif "risk_off" in regime:
-                weight *= 0.25
-
-            # Only active (non-HOLD) signals contribute to score
-            if signal == "HOLD":
+        for sig in quant_signals:
+            if sig["signal"] == "HOLD":
                 continue
 
-            active_agents += 1
-            if signal == "BUY":
-                buy_votes += 1
-            elif signal == "SELL":
-                sell_votes += 1
+            agent_name = sig["agent"]
+            base_score = sig.get("score", 0.0)
+            confidence = sig.get("confidence", 0.5)
 
-            total_score += score * weight
-            total_weight += weight
-            reasons.append(f"{agent_name}({signal}): {sig.get('reason', '')}")
+            category = self._get_agent_category(agent_name)
+            regime_mult = multipliers.get(category, 1.0)
 
-        if total_weight == 0 or active_agents == 0:
-            return self._build_result(symbol, "HOLD", 0.0, 0.0, "No active agent signals", regime, "none")
+            # HARD GATE: Check regime compatibility
+            # If the strategy strictly declares regimes, and current is not one of them, BLOCK IT.
+            is_compatible = True
+            if "regime_compatibility" in sig and sig["regime_compatibility"]:
+                 if regime not in sig["regime_compatibility"]:
+                      is_compatible = False
 
-        consensus_score = total_score / total_weight
+            # If regime is completely unknown, we must be conservative. Only strategies compatible with "unknown" can trade.
+            # Most shouldn't be, so they get blocked.
+            if regime == "unknown" and ("regime_compatibility" in sig and sig["regime_compatibility"]):
+                 if "unknown" not in sig["regime_compatibility"]:
+                      is_compatible = False
 
-        if "risk_off" in regime and consensus_score > 0:
-            consensus_score = min(consensus_score, 0.0)
-            reasons.append("BUY suppressed due to risk_off regime")
+            # Low confidence regime fallback
+            if regime_confidence < 0.3:
+                 # If we aren't confident in the regime, it acts like unknown.
+                 if "unknown" not in sig.get("regime_compatibility", []):
+                     is_compatible = False
 
-        if "trending_bull" in regime and consensus_score < 0:
-            consensus_score *= 0.5
-            reasons.append("SELL weakened by trending_bull regime")
+            if not is_compatible:
+                logger.debug(f"Strategy {agent_name} blocked due to regime incompatibility ({regime})")
+                regime_mult = 0.0
 
-        if "trending_bear" in regime and consensus_score > 0:
-            consensus_score *= 0.5
-            reasons.append("BUY weakened by trending_bear regime")
+            # Even if regime multiplier is zero from dictionary, ensure the hard gate holds
+            if regime_mult == 0.0:
+                 continue
 
-        confidence = abs(consensus_score)
-        # Boost confidence when multiple agents agree in same direction
-        if buy_votes >= 2 and sell_votes == 0:
-            confidence = min(confidence * (1.0 + 0.12 * (buy_votes - 1)), 0.98)
-        if sell_votes >= 2 and buy_votes == 0:
-            confidence = min(confidence * (1.0 + 0.12 * (sell_votes - 1)), 0.98)
+            perf_mult = 1.0
+            if self.attribution_tracker:
+                 perf_mult = self.attribution_tracker.get_strategy_weight(agent_name)
 
+            final_weight = regime_mult * perf_mult * confidence
+            weighted_score = base_score * final_weight
+
+            total_score += weighted_score
+            total_weight += final_weight
+
+            if abs(weighted_score) > abs(highest_weighted_score):
+                highest_weighted_score = weighted_score
+                primary_agent = agent_name
+
+        # Avoid div by zero
+        normalized_score = total_score / total_weight if total_weight > 0 else 0.0
+
+        # Gemini can act as a veto, not a direct trader
+        if gemini_signal and gemini_signal.get("signal") == "VETO":
+             logger.warning(f"Gemini AI VETO applied for {symbol}. Reason: {gemini_signal.get('reason')}")
+             return {
+                 "symbol": symbol,
+                 "signal": "HOLD",
+                 "score": 0.0,
+                 "confidence": 1.0,
+                 "reason": f"AI Veto: {gemini_signal.get('reason')}",
+                 "primary_agent": "gemini_veto"
+             }
+
+        # Threshold for action
         final_signal = "HOLD"
-        if consensus_score > 0 and confidence >= self.min_confidence:
+        confidence_out = min(abs(normalized_score), 1.0)
+
+        if normalized_score > 0.35:
             final_signal = "BUY"
-        elif consensus_score < 0 and confidence >= self.min_confidence:
+        elif normalized_score < -0.35:
             final_signal = "SELL"
 
-        if buy_votes > 0 and sell_votes > 0:
-            conflict_penalty = 0.15 * min(buy_votes, sell_votes)
-            confidence = max(0.0, confidence - conflict_penalty)
-            reasons.append(f"Conflict penalty ({buy_votes}B/{sell_votes}S)")
-            if confidence < self.min_confidence:
-                final_signal = "HOLD"
-
-        if gemini_signal and gemini_signal.get("signal") not in (None, "HOLD"):
-            g_conf = gemini_signal.get("confidence", 0)
-            if final_signal == "BUY" and gemini_signal["signal"] == "SELL" and g_conf > 0.65:
-                final_signal = "HOLD"
-                confidence = 0.0
-                reasons.append(f"Gemini veto: {gemini_signal.get('reason', '')}")
-            elif final_signal == "SELL" and gemini_signal["signal"] == "BUY" and g_conf > 0.65:
-                final_signal = "HOLD"
-                confidence = 0.0
-                reasons.append(f"Gemini veto: {gemini_signal.get('reason', '')}")
-
-        primary_agent = "none"
-        if final_signal != "HOLD":
-            best_agent_score = 0.0
-            for sig in all_signals:
-                if sig.get("signal") == final_signal:
-                    agent_name = sig["agent"]
-                    w = self.weights.get(agent_name, 1.0)
-                    s = float(sig.get("score", 0) or 0)
-                    contribution = abs(s * w)
-                    if contribution > best_agent_score:
-                        best_agent_score = contribution
-                        primary_agent = agent_name
-
-        reason_str = " | ".join(reasons) if reasons else "Neutral consensus"
-        return self._build_result(symbol, final_signal, consensus_score, confidence, reason_str, regime, primary_agent)
-
-    def _build_result(self, symbol: str, signal: str, score: float, confidence: float, reason: str, regime: str, primary_agent: str) -> Dict[str, Any]:
         return {
             "symbol": symbol,
-            "signal": signal,
-            "score": float(score),
-            "confidence": float(confidence),
-            "reason": reason,
-            "regime": regime,
+            "signal": final_signal,
+            "score": normalized_score,
+            "confidence": confidence_out,
+            "reason": f"Regime: {regime}, Aggregate Score: {normalized_score:.2f}",
             "primary_agent": primary_agent
         }

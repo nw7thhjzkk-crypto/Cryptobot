@@ -1,11 +1,11 @@
 import pandas as pd
 from typing import Dict, Any
 from bot.agents.base import BaseAgent
-from bot.strategy import calculate_atr
+from bot.factors import calculate_atr
 
 class RangeExpansionAgent(BaseAgent):
     def __init__(self, atr_lookback: int = 14, multiple: float = 1.5, min_history: int = 30):
-        super().__init__("RangeExpansionAgent")
+        super().__init__("RangeExpansionAgent", version="1.1", parameters={"atr_lookback": atr_lookback, "multiple": multiple}, regime_compatibility=["ranging", "transitional"])
         self.atr_lookback = atr_lookback
         self.multiple = multiple
         self.min_history = min_history
@@ -46,6 +46,7 @@ class RangeExpansionAgent(BaseAgent):
 
         return {
             "agent": self.name,
+            "version": self.version,
             "symbol": symbol,
             "signal": signal,
             "score": score,

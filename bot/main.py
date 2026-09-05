@@ -25,13 +25,14 @@ from bot.agents.breakout import BreakoutAgent
 from bot.agents.volatility import VolatilityAgent
 from bot.agents.volume import VolumeAgent
 from bot.agents.relative_strength import RelativeStrengthAgent
-from bot.agents.market_regime import MarketRegimeAgent
+from bot.regime_engine import MarketRegimeEngine
 from bot.agents.gemini_agents import GeminiContextAgent
 from bot.agents.donchian import DonchianBreakoutAgent
 from bot.agents.dual_momentum import DualMomentumAgent
 from bot.agents.range_expansion import RangeExpansionAgent
 
 from bot.consensus import ConsensusEngine
+from bot.research.attribution import AttributionTracker
 from bot.portfolio import PortfolioEngine
 from bot.risk import RiskEngine, check_drawdown_breaker, calculate_position_size, check_portfolio_risk
 from bot.execution import ExecutionEngine
@@ -67,7 +68,7 @@ def main_loop():
         RelativeStrengthAgent(), DonchianBreakoutAgent(),
         DualMomentumAgent(), RangeExpansionAgent()
     ]
-    regime_agent = MarketRegimeAgent()
+    regime_agent = MarketRegimeEngine()
     gemini_agent = GeminiContextAgent()
 
     consensus_engine = ConsensusEngine(min_confidence=MIN_SIGNAL_CONFIDENCE)
@@ -154,7 +155,7 @@ def main_loop():
                     current_price = latest_res["price"]
 
                     regime_signal = regime_agent.analyze(symbol, df)
-                    regime_str = regime_signal["features"].get("regime", "unknown")
+                    regime_str = regime_signal.get("regime", "unknown")
 
                     quant_signals = []
                     for agent in quant_agents:
@@ -246,7 +247,7 @@ def main_loop():
                         logger.warning(f"Risk rejected {proposed_signal} for {symbol}: {risk_eval['reason']}")
                         continue
 
-                    logger.info(f"Symbol: {symbol} | Regime: {regime_str} | Action: {proposed_signal} | Qty: {qty}")
+                    logger.info(f"Symbol: {symbol} | Regime: {regime_str} | Sleeve: {primary_agent} | Action: {proposed_signal} | Qty: {qty}")
 
                     order_res = execution_engine.execute_order(symbol, proposed_signal, qty)
 
