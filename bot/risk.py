@@ -111,15 +111,16 @@ def check_drawdown_breaker(equity_history: list, max_drawdown_pct: float, window
 
 
 class RiskEngine:
-    def __init__(self, paper_mode: bool, max_position_pct: float):
+    def __init__(self, paper_mode: bool, max_position_pct: float, max_daily_loss: float = 0.05):
         self.paper_mode = paper_mode
         self.max_position_pct = max_position_pct
+        self.max_daily_loss = max_daily_loss
 
     def evaluate_order(
         self,
         symbol: str,
         signal: str,
-        qty: int,
+        qty: float,
         price: float,
         equity: float,
         buying_power: float
@@ -129,16 +130,17 @@ class RiskEngine:
             return {"approved": False, "reason": "Signal is HOLD"}
 
         if qty <= 0:
-            return {"approved": False, "reason": "Quantity is zero or negative"}
+            return {"approved": False, "reason": "QUANTITY_ZERO_OR_NEGATIVE"}
 
         if equity <= 0:
-            return {"approved": False, "reason": "Account equity is zero or negative"}
+            return {"approved": False, "reason": "EQUITY_ZERO_OR_NEGATIVE"}
 
         if price <= 0 or math.isnan(price) or math.isinf(price):
-            return {"approved": False, "reason": "Invalid price data"}
+            return {"approved": False, "reason": "INVALID_PRICE_DATA"}
 
         if not self.paper_mode:
-            logger.warning("LIVE TRADING MODE DETECTED. Extreme caution.")
+            logger.warning("LIVE TRADING MODE DETECTED. Blocking orders to prevent live execution.")
+            return {"approved": False, "reason": "PAPER_MODE_REQUIRED"}
 
         position_value = qty * price
         max_allowed_value = equity * self.max_position_pct
@@ -146,13 +148,13 @@ class RiskEngine:
         if position_value > max_allowed_value:
             return {
                 "approved": False,
-                "reason": f"Position value ${position_value:.0f} exceeds max ${max_allowed_value:.0f}"
+                "reason": f"MAX_POSITION_SIZE (Value ${position_value:.0f} > Max ${max_allowed_value:.0f})"
             }
 
         if signal == "BUY" and position_value > buying_power:
             return {
                 "approved": False,
-                "reason": f"Insufficient buying power (need ${position_value:.0f}, have ${buying_power:.0f})"
+                "reason": f"INSUFFICIENT_BUYING_POWER (Need ${position_value:.0f} > Have ${buying_power:.0f})"
             }
 
-        return {"approved": True, "reason": "Risk checks passed"}
+        return {"approved": True, "reason": "RISK_CHECKS_PASSED"}

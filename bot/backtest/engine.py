@@ -2,115 +2,105 @@ import pandas as pd
 import numpy as np
 
 class BacktestEngine:
-    def __init__(self, initial_capital=10000.0, transaction_cost=0.001):
+    def __init__(self, initial_capital: float = 10000.0, transaction_cost: float = 0.001, slippage: float = 0.0005):
         self.initial_capital = initial_capital
         self.transaction_cost = transaction_cost
+        self.slippage = slippage
 
     def run(self, agent, symbol: str, data: pd.DataFrame, benchmark: pd.DataFrame = None):
         """
-        Runs a deterministic, single-asset backtest for a given agent on a DataFrame.
+        Chronological walk forward backtest without lookahead bias.
         """
-        if len(data) == 0:
-            return self._empty_result()
-
         capital = self.initial_capital
         position = 0
         entry_price = 0.0
 
         trades = []
-        equity_curve = []
+        equity_curve = [self.initial_capital]
 
-        # We need to simulate stepping through time to prevent lookahead bias.
-        # This is slow, but correct. For production research, vectorized might be preferred,
-        # but this is deterministic and uses the exact agent logic.
+        # To prevent lookahead, we feed data up to index 'i'
+        for i in range(50, len(data)):
+            window = data.iloc[:i]
+            bench_window = benchmark.iloc[:i] if benchmark is not None else None
 
-        # Start at a minimum index so indicators can warm up
-        warmup = 65
-        if len(data) <= warmup:
-            return self._empty_result()
+            # The agent only sees data up to current bar (close)
+            # The trade will be executed on the NEXT bar's open (realistic timing)
+            # For simplicity in this engine, we'll execute at current bar's close + slippage
+            signal_res = agent.analyze(symbol, window, benchmark_history=bench_window)
+            signal = signal_res.get("signal", "HOLD")
 
-        for i in range(warmup, len(data)):
-            # Create a slice of data up to current bar to pass to agent
-            # Use i+1 because iloc upper bound is exclusive
-            current_slice = data.iloc[:i+1].copy()
-            current_close = float(current_slice['close'].iloc[-1])
+            current_price = float(data['close'].iloc[i-1])
 
-            # Record daily equity
-            if position > 0:
-                current_value = position * current_close
-                equity_curve.append(capital + current_value)
-            else:
-                equity_curve.append(capital)
-
-            # Check if agent requires benchmark
-            kwargs = {}
-            if benchmark is not None:
-                kwargs['benchmark_history'] = benchmark.iloc[:i+1].copy()
-
-            # Get signal
-            res = agent.analyze(symbol, current_slice, **kwargs)
-            signal = res.get("signal", "HOLD")
-
-            # Extremely simple execution: enter on next open (we just use close here for simplicity in this basic framework)
-            # In a full system, you would execute on next open to avoid lookahead.
-
-            if signal == "BUY" and position == 0:
-                # Calculate qty we can afford
-                trade_size = capital * 0.95 # Leave some cash
-                qty = trade_size / current_close
-                cost = trade_size * self.transaction_cost
-
+            if position == 0 and signal == "BUY":
+                # Buy
+                qty = (capital * 0.95) / (current_price * (1 + self.slippage)) # 95% allocation
+                cost = (qty * current_price) * self.transaction_cost
+                capital -= cost
                 position = qty
-                entry_price = current_close
-                capital -= (trade_size + cost)
+                entry_price = current_price * (1 + self.slippage)
 
-            elif signal == "SELL" and position > 0:
-                proceeds = position * current_close
+            elif position > 0 and signal == "SELL":
+                # Sell
+                exit_price = current_price * (1 - self.slippage)
+                proceeds = position * exit_price
                 cost = proceeds * self.transaction_cost
-
                 capital += (proceeds - cost)
 
-                # Record trade
-                pnl = (current_close - entry_price) / entry_price
+                pnl = (exit_price - entry_price) / entry_price
                 trades.append(pnl)
 
                 position = 0
                 entry_price = 0.0
 
+            # Mark to market
+            current_equity = capital + (position * current_price if position > 0 else 0)
+            equity_curve.append(current_equity)
+
         # Close open position at end
         if position > 0:
-            proceeds = position * float(data['close'].iloc[-1])
+            exit_price = float(data['close'].iloc[-1]) * (1 - self.slippage)
+            proceeds = position * exit_price
             cost = proceeds * self.transaction_cost
             capital += (proceeds - cost)
-            pnl = (float(data['close'].iloc[-1]) - entry_price) / entry_price
+            pnl = (exit_price - entry_price) / entry_price
             trades.append(pnl)
             equity_curve.append(capital)
 
-        return self._calculate_metrics(trades, equity_curve)
+        return self._calculate_metrics(trades, equity_curve, agent.parameters)
 
-    def _empty_result(self):
+    def _empty_result(self, parameters):
         return {
             "total_return": 0.0,
             "sharpe_ratio": 0.0,
+            "sortino_ratio": 0.0,
             "max_drawdown": 0.0,
             "win_rate": 0.0,
-            "num_trades": 0
+            "num_trades": 0,
+            "parameters": parameters,
+            "cost_assumption": self.transaction_cost,
+            "slippage_assumption": self.slippage
         }
 
-    def _calculate_metrics(self, trades, equity_curve):
+    def _calculate_metrics(self, trades, equity_curve, parameters):
         if not trades or len(equity_curve) < 2:
-            return self._empty_result()
+            return self._empty_result(parameters)
 
         total_return = (equity_curve[-1] - self.initial_capital) / self.initial_capital
 
         eq_series = pd.Series(equity_curve)
         daily_returns = eq_series.pct_change().dropna()
 
-        # Approx Sharpe (Assuming 252 trading days)
+        # Approx Sharpe & Sortino (Assuming 365 trading days for crypto)
         if daily_returns.std() == 0:
             sharpe = 0.0
+            sortino = 0.0
         else:
-            sharpe = (daily_returns.mean() / daily_returns.std()) * np.sqrt(252)
+            sharpe = (daily_returns.mean() / daily_returns.std()) * np.sqrt(365)
+            downside = daily_returns[daily_returns < 0]
+            if len(downside) > 0 and downside.std() > 0:
+                sortino = (daily_returns.mean() / downside.std()) * np.sqrt(365)
+            else:
+                sortino = sharpe # No downside volatility
 
         rolling_max = eq_series.cummax()
         drawdowns = (eq_series - rolling_max) / rolling_max
@@ -122,7 +112,12 @@ class BacktestEngine:
         return {
             "total_return": float(total_return),
             "sharpe_ratio": float(sharpe),
+            "sortino_ratio": float(sortino),
             "max_drawdown": float(max_drawdown),
             "win_rate": float(win_rate),
-            "num_trades": len(trades)
+            "num_trades": len(trades),
+            "parameters": parameters,
+            "cost_assumption": self.transaction_cost,
+            "slippage_assumption": self.slippage,
+            "trades_list": trades # For robustness monte carlo
         }

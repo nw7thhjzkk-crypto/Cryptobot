@@ -1,5 +1,6 @@
 import pandas as pd
 from bot.backtest.engine import BacktestEngine
+from bot.backtest.robustness import RobustnessTester
 
 class WalkForwardValidator:
     def __init__(self, train_ratio=0.7):
@@ -9,6 +10,7 @@ class WalkForwardValidator:
         """
         Splits data into TRAIN and VALIDATE periods.
         Runs backtest on both.
+        Runs robustness checks on validation trades.
         Returns validation report and boolean indicating if it passed basic constraints.
         """
         n = len(data)
@@ -25,21 +27,32 @@ class WalkForwardValidator:
         train_metrics = engine.run(agent, symbol, train_data, train_bench)
         val_metrics = engine.run(agent, symbol, val_data, val_bench)
 
+        # Robustness Testing
+        robust_tester = RobustnessTester()
+        robustness_report = robust_tester.test_monte_carlo(val_metrics.get("trades_list", []))
+
+        # We can drop the trades list from the final report to avoid bloat
+        train_metrics.pop("trades_list", None)
+        val_metrics.pop("trades_list", None)
+
         # Validation checks to prevent overfitting
         passed = False
 
-        # Simple out-of-sample rule: Positive return, reasonable win rate, no catastrophic drawdown
-        if (val_metrics["total_return"] > -0.05 and
+        # Out-of-sample rule: Positive return, reasonable win rate, no catastrophic drawdown, passes robustness
+        if (val_metrics["total_return"] > 0.0 and
             val_metrics["max_drawdown"] > -0.30 and
-            val_metrics["num_trades"] > 0):
+            val_metrics["num_trades"] > 0 and
+            robustness_report["passed"]):
             passed = True
 
         report = {
             "agent": agent.name,
+            "version": getattr(agent, "version", "1.0"),
             "symbol": symbol,
             "passed": passed,
             "train": train_metrics,
-            "validate": val_metrics
+            "validate": val_metrics,
+            "robustness": robustness_report
         }
 
         return report

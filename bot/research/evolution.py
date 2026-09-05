@@ -41,7 +41,7 @@ A strategy described as follows:
 Has produced the following out-of-sample performance:
 {json.dumps(performance_report, indent=2)}
 
-Propose exactly ONE set of parameter changes to improve its performance in the future.
+Propose exactly ONE set of parameter changes to improve its robustness and out of sample performance.
 For example, modifying a lookback window, threshold, or multiplier.
 
 Respond ONLY with valid JSON in this schema (no markdown):
@@ -92,7 +92,9 @@ Respond ONLY with valid JSON in this schema (no markdown):
 ## Baseline Performance
 - **Train Return:** {baseline_report['train']['total_return']:.2%}
 - **Val Return:** {baseline_report['validate']['total_return']:.2%}
+- **Val Sharpe:** {baseline_report['validate'].get('sharpe_ratio', 0.0):.2f}
 - **Val Max Drawdown:** {baseline_report['validate']['max_drawdown']:.2%}
+- **Robustness Passed:** {baseline_report.get('robustness', {}).get('passed', False)}
 
 ## AI Hypothesis
 - **Hypothesis:** {hypothesis.get('hypothesis', 'N/A')}
@@ -102,28 +104,27 @@ Respond ONLY with valid JSON in this schema (no markdown):
 ## Hypothesis Validation
 - **Train Return:** {hypothesis_report['train']['total_return']:.2%}
 - **Val Return:** {hypothesis_report['validate']['total_return']:.2%}
+- **Val Sharpe:** {hypothesis_report['validate'].get('sharpe_ratio', 0.0):.2f}
 - **Val Max Drawdown:** {hypothesis_report['validate']['max_drawdown']:.2%}
 - **Val Win Rate:** {hypothesis_report['validate']['win_rate']:.2%}
 - **Val Trade Count:** {hypothesis_report['validate']['num_trades']}
+- **Robustness Passed:** {hypothesis_report.get('robustness', {}).get('passed', False)}
 
 ## Conclusion
 """
         if not passed:
             report += f"The hypothesis was **REJECTED**.\nReason: {rejection_reason}\n"
         else:
-            report += "The hypothesis was **ACCEPTED**.\n"
+            report += "The hypothesis was **ACCEPTED** for Candidate phase.\n"
 
         return report
 
 def run_evolution_cycle():
     logger.info("Starting Strategy Evolution Cycle...")
 
-    # We will test evolution on one core symbol for demonstration/stability.
-    # In full production, this might loop multiple symbols and average results.
     symbol = "BTC/USD"
     logger.info(f"Fetching historical data for {symbol}")
 
-    # Needs a long history for a good walk forward. We use 400 days here if available.
     res = get_price_history_batch([symbol], lookback_days=400)
 
     if not res["success"] or symbol not in res["data"]:
@@ -135,7 +136,6 @@ def run_evolution_cycle():
     engine = EvolutionEngine()
     validator = WalkForwardValidator()
 
-    # Let's try evolving the DonchianBreakoutAgent
     logger.info("Evaluating Baseline DonchianBreakoutAgent...")
     baseline_agent = DonchianBreakoutAgent()
     baseline_report = validator.validate(baseline_agent, symbol, df)
@@ -151,7 +151,6 @@ def run_evolution_cycle():
     logger.info(f"Hypothesis generated: {hypothesis}")
 
     new_params = hypothesis.get("proposed_parameters", {})
-    # Safety: Filter to ensure only allowed parameters are passed
     safe_params = {k: v for k, v in new_params.items() if k in ["entry_lookback", "exit_lookback"]}
 
     if not safe_params:
@@ -165,18 +164,18 @@ def run_evolution_cycle():
         logger.error("Failed to evaluate hypothesis.")
         return
 
-    # Deterministic acceptance logic
     passed = False
     rejection_reason = ""
 
     if not hypothesis_report["passed"]:
         rejection_reason = "Failed basic out-of-sample validation constraints (negative return or catastrophic drawdown)."
+    elif not hypothesis_report.get("robustness", {}).get("passed", False):
+        rejection_reason = "Failed Monte Carlo robustness bootstrapping."
     elif hypothesis_report["validate"]["total_return"] <= baseline_report["validate"]["total_return"]:
         rejection_reason = "Out-of-sample return did not beat baseline."
     else:
         passed = True
 
-    # Terminal summary
     print("\n" + "="*50)
     print("EVOLUTION CYCLE SUMMARY")
     print("="*50)
@@ -190,13 +189,11 @@ def run_evolution_cycle():
         print(f"Reason: {rejection_reason}")
     print("="*50 + "\n")
 
-    # Save markdown report
     os.makedirs("reports/evolution", exist_ok=True)
     report_md = engine.create_markdown_report(
         "DonchianBreakoutAgent", baseline_report, hypothesis, hypothesis_report, passed, rejection_reason
     )
 
-    # Overwrite 'latest.md' to prevent infinite repo bloat
     report_path = "reports/evolution/latest.md"
     with open(report_path, "w") as f:
         f.write(report_md)

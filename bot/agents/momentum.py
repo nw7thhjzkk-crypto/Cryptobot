@@ -1,34 +1,34 @@
 import pandas as pd
 from typing import Dict, Any
 from bot.agents.base import BaseAgent
-from bot.strategy import calculate_rsi
+from bot.factors import calculate_rsi
 
 class MomentumAgent(BaseAgent):
     def __init__(self):
-        super().__init__("MomentumAgent")
+        super().__init__("MomentumAgent", version="1.1", parameters={"rsi_length": 14, "roc_length": 10}, regime_compatibility=["trending_bull", "trending_bear"])
 
     def analyze(self, symbol: str, price_history: pd.DataFrame, **kwargs) -> Dict[str, Any]:
-        if len(price_history) < 25:
-            return self._create_hold_signal(symbol, "Insufficient data for momentum analysis")
+        if len(price_history) < max(self.parameters["rsi_length"], self.parameters["roc_length"]) + 5:
+            return self._create_hold_signal(symbol, "Insufficient data for Momentum Agent")
 
         df = price_history.copy()
-        rsi = calculate_rsi(df, length=14)
 
-        roc_period = 10
-        roc = ((df['close'] - df['close'].shift(roc_period)) / df['close'].shift(roc_period)) * 100
-
-        if rsi is None or rsi.empty or roc.empty:
-            return self._create_hold_signal(symbol, "Failed to calculate indicators")
+        rsi = calculate_rsi(df, length=self.parameters["rsi_length"])
+        if rsi is None or rsi.empty:
+            return self._create_hold_signal(symbol, "RSI calculation failed")
 
         curr_rsi = float(rsi.iloc[-1])
-        curr_roc = float(roc.iloc[-1])
-        prev_roc = float(roc.iloc[-2]) if len(roc) > 1 else 0.0
+
+        # Rate of Change (ROC)
+        roc_len = self.parameters["roc_length"]
+        curr_roc = (df['close'].iloc[-1] - df['close'].iloc[-roc_len-1]) / df['close'].iloc[-roc_len-1] * 100
+        prev_roc = (df['close'].iloc[-2] - df['close'].iloc[-roc_len-2]) / df['close'].iloc[-roc_len-2] * 100
 
         signal = "HOLD"
         confidence = 0.0
-        reason = "Neutral momentum"
+        reason = "Momentum is flat or conflicting"
 
-        # Strong momentum continuation
+        # Strong accelerating momentum
         if curr_rsi > 55 and curr_roc > 3.0 and curr_roc > prev_roc:
             signal = "BUY"
             confidence = min(0.45 + (curr_roc / 12.0) + (curr_rsi - 50) / 40.0, 0.88)
@@ -54,6 +54,7 @@ class MomentumAgent(BaseAgent):
 
         return {
             "agent": self.name,
+            "version": self.version,
             "symbol": symbol,
             "signal": signal,
             "score": float(score),

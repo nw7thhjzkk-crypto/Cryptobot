@@ -4,61 +4,53 @@ from bot.agents.base import BaseAgent
 
 class VolumeAgent(BaseAgent):
     def __init__(self):
-        super().__init__("VolumeAgent")
+        super().__init__("VolumeAgent", version="1.1", parameters={"volume_sma_len": 20, "price_roc_len": 3}, regime_compatibility=["trending_bull", "trending_bear", "ranging"])
 
     def analyze(self, symbol: str, price_history: pd.DataFrame, **kwargs) -> Dict[str, Any]:
-        if len(price_history) < 25:
-            return self._create_hold_signal(symbol, "Insufficient data for volume analysis")
+        if len(price_history) < self.parameters["volume_sma_len"] + 5:
+            return self._create_hold_signal(symbol, "Insufficient data for Volume Agent")
 
         df = price_history.copy()
 
-        vol_avg = df['volume'].rolling(window=20).mean()
+        v_len = self.parameters["volume_sma_len"]
+        p_len = self.parameters["price_roc_len"]
 
-        if vol_avg.empty:
-            return self._create_hold_signal(symbol, "Failed to calculate volume average")
+        avg_vol = df['volume'].iloc[-v_len-1:-1].mean()
+        curr_vol = float(df['volume'].iloc[-1])
 
-        curr_vol = df['volume'].iloc[-1]
-        curr_vol_avg = vol_avg.iloc[-1]
+        if avg_vol == 0:
+            return self._create_hold_signal(symbol, "Average volume is zero")
 
-        if curr_vol_avg <= 0:
-            return self._create_hold_signal(symbol, "Invalid volume average")
+        vol_ratio = curr_vol / avg_vol
 
-        rvol = curr_vol / curr_vol_avg
-
-        curr_close = df['close'].iloc[-1]
-        curr_open = df['open'].iloc[-1]
-        prev_close = df['close'].iloc[-2]
-
-        is_bullish_bar = curr_close > curr_open and curr_close > prev_close
-        is_bearish_bar = curr_close < curr_open and curr_close < prev_close
+        price_roc = (df['close'].iloc[-1] - df['close'].iloc[-p_len-1]) / df['close'].iloc[-p_len-1] * 100
 
         signal = "HOLD"
         confidence = 0.0
-        reason = "Normal volume"
+        reason = "Normal volume activity"
 
-        if rvol > 2.0:
-            if is_bullish_bar:
+        if vol_ratio > 2.0:
+            if price_roc > 1.5:
                 signal = "BUY"
-                confidence = min(0.5 + (rvol - 2.0) * 0.2, 0.95)
-                reason = f"Significant bullish volume influx (RVOL {rvol:.2f})"
-            elif is_bearish_bar:
+                confidence = min(0.5 + (vol_ratio - 2.0) * 0.1, 0.90)
+                reason = f"High volume price surge (Vol Ratio {vol_ratio:.1f}, ROC {price_roc:.1f}%)"
+            elif price_roc < -1.5:
                 signal = "SELL"
-                confidence = min(0.5 + (rvol - 2.0) * 0.2, 0.95)
-                reason = f"Significant bearish volume selling pressure (RVOL {rvol:.2f})"
-            else:
-                 reason = f"High volume (RVOL {rvol:.2f}) but indecisive price action"
+                confidence = min(0.5 + (vol_ratio - 2.0) * 0.1, 0.90)
+                reason = f"High volume price drop (Vol Ratio {vol_ratio:.1f}, ROC {price_roc:.1f}%)"
 
         score = confidence if signal == "BUY" else (-confidence if signal == "SELL" else 0.0)
 
         return {
             "agent": self.name,
+            "version": self.version,
             "symbol": symbol,
             "signal": signal,
-            "score": score,
-            "confidence": confidence,
+            "score": float(score),
+            "confidence": float(confidence),
             "reason": reason,
             "features": {
-                "relative_volume": float(rvol),
-                "volume_avg": float(curr_vol_avg)
+                "vol_ratio": curr_vol / avg_vol if avg_vol > 0 else 0,
+                "price_roc_3": price_roc
             }
         }
