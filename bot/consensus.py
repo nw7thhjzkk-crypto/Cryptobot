@@ -43,6 +43,12 @@ class ConsensusEngine:
         if isinstance(regime_signal.get("features"), dict):
              regime = regime_signal["features"].get("regime", regime)
 
+        # Fallback for missing/invalid regime
+        if regime not in self.regime_multipliers:
+             regime = "unknown"
+
+        regime_confidence = regime_signal.get("confidence", 0.5)
+
         multipliers = self.regime_multipliers.get(regime, self.regime_multipliers["unknown"])
 
         total_score = 0.0
@@ -61,10 +67,32 @@ class ConsensusEngine:
             category = self._get_agent_category(agent_name)
             regime_mult = multipliers.get(category, 1.0)
 
-            # Check regime compatibility if exposed
+            # HARD GATE: Check regime compatibility
+            # If the strategy strictly declares regimes, and current is not one of them, BLOCK IT.
+            is_compatible = True
             if "regime_compatibility" in sig and sig["regime_compatibility"]:
                  if regime not in sig["regime_compatibility"]:
-                      regime_mult = 0.0 # Force zero if completely incompatible
+                      is_compatible = False
+
+            # If regime is completely unknown, we must be conservative. Only strategies compatible with "unknown" can trade.
+            # Most shouldn't be, so they get blocked.
+            if regime == "unknown" and ("regime_compatibility" in sig and sig["regime_compatibility"]):
+                 if "unknown" not in sig["regime_compatibility"]:
+                      is_compatible = False
+
+            # Low confidence regime fallback
+            if regime_confidence < 0.3:
+                 # If we aren't confident in the regime, it acts like unknown.
+                 if "unknown" not in sig.get("regime_compatibility", []):
+                     is_compatible = False
+
+            if not is_compatible:
+                logger.debug(f"Strategy {agent_name} blocked due to regime incompatibility ({regime})")
+                regime_mult = 0.0
+
+            # Even if regime multiplier is zero from dictionary, ensure the hard gate holds
+            if regime_mult == 0.0:
+                 continue
 
             perf_mult = 1.0
             if self.attribution_tracker:

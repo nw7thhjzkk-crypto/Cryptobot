@@ -168,7 +168,7 @@ def run_evolution_cycle():
     rejection_reason = ""
 
     if not hypothesis_report["passed"]:
-        rejection_reason = "Failed basic out-of-sample validation constraints (negative return or catastrophic drawdown)."
+        rejection_reason = hypothesis_report.get("status", "Failed basic out-of-sample constraints")
     elif not hypothesis_report.get("robustness", {}).get("passed", False):
         rejection_reason = "Failed Monte Carlo robustness bootstrapping."
     elif hypothesis_report["validate"]["total_return"] <= baseline_report["validate"]["total_return"]:

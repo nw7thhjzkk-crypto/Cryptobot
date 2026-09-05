@@ -37,19 +37,25 @@ class WalkForwardValidator:
 
         # Validation checks to prevent overfitting
         passed = False
+        status = "REJECTED"
 
         # Out-of-sample rule: Positive return, reasonable win rate, no catastrophic drawdown, passes robustness
-        if (val_metrics["total_return"] > 0.0 and
-            val_metrics["max_drawdown"] > -0.30 and
-            val_metrics["num_trades"] > 0 and
+        if robustness_report.get("reason", "").startswith("INSUFFICIENT_EVIDENCE"):
+            status = "INSUFFICIENT_EVIDENCE"
+            passed = False
+        elif (val_metrics["total_return"] > 0.0 and
+            val_metrics["max_drawdown"] > -0.25 and
+            val_metrics["num_trades"] >= 15 and
             robustness_report["passed"]):
             passed = True
+            status = "PASSED"
 
         report = {
             "agent": agent.name,
             "version": getattr(agent, "version", "1.0"),
             "symbol": symbol,
             "passed": passed,
+            "status": status,
             "train": train_metrics,
             "validate": val_metrics,
             "robustness": robustness_report

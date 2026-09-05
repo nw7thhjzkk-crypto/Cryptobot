@@ -31,3 +31,15 @@ def test_check_portfolio_risk():
 
     res2 = check_portfolio_risk(open_pos, 460.0, 0.05, 10000.0)
     assert res2 is False
+
+def test_risk_engine_blocks_live_trading():
+    engine = RiskEngine(paper_mode=False, max_position_pct=0.20)
+    res = engine.evaluate_order("AAPL", "BUY", 10, 150.0, 10000.0, 10000.0)
+    assert res["approved"] is False
+    assert "PAPER_MODE_REQUIRED" in res["reason"]
+
+def test_risk_engine_blocks_negative_quantity():
+    engine = RiskEngine(paper_mode=True, max_position_pct=0.20)
+    res = engine.evaluate_order("AAPL", "BUY", -5, 150.0, 10000.0, 10000.0)
+    assert res["approved"] is False
+    assert "QUANTITY" in res["reason"]
