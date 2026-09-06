@@ -1,0 +1,84 @@
+name: Autonomous Jules PR Auto-Merge
+
+on:
+  workflow_run:
+    workflows: ["CI Pipeline"]
+    types:
+      - completed
+
+jobs:
+  auto-merge:
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    steps:
+      - name: Validate and Merge
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const head_branch = context.payload.workflow_run.head_branch;
+
+            // Get Repository
+            const { data: repository } = await github.rest.repos.get({
+              owner,
+              repo
+            });
+            const default_branch = repository.default_branch;
+
+            // Fetch open PRs matching the branch
+            const { data: pulls } = await github.rest.pulls.list({
+              owner,
+              repo,
+              head: `${owner}:${head_branch}`,
+              state: 'open'
+            });
+
+            if (pulls.length === 0) {
+              console.log("No open PRs found for the passing branch.");
+              return;
+            }
+
+            const pr = pulls[0];
+
+            // Validations
+            const sameRepo = pr.head.repo.full_name === `${owner}/${repo}`;
+            const notFork = !pr.head.repo.fork;
+            const notDraft = !pr.draft;
+            const correctBase = pr.base.ref === default_branch;
+            // Support exact provenance or fallback to repo owner for some setups
+            const julesProvenance = pr.user.login === 'google-labs-jules[bot]' || pr.user.login === owner;
+            const ciShaMatch = pr.head.sha === context.payload.workflow_run.head_sha;
+
+            console.log({sameRepo, notFork, notDraft, correctBase, julesProvenance, ciShaMatch});
+
+            if (!sameRepo || !notFork || !notDraft || !correctBase || !julesProvenance || !ciShaMatch) {
+              core.setFailed("PR failed auto-merge eligibility requirements.");
+              return;
+            }
+
+            // High risk path protection
+            const { data: files } = await github.rest.pulls.listFiles({
+              owner,
+              repo,
+              pull_number: pr.number
+            });
+
+            const highRiskPatterns = ['.github/workflows/', 'AGENTS.md', 'opencode.json'];
+            for (const file of files) {
+              for (const pattern of highRiskPatterns) {
+                if (file.filename.includes(pattern) || file.filename === pattern) {
+                  core.setFailed(`High risk file modified: ${file.filename}. Manual review required.`);
+                  return;
+                }
+              }
+            }
+
+            // Merge
+            console.log(`All checks passed. Merging PR #${pr.number} for SHA ${pr.head.sha}`);
+            await github.rest.pulls.merge({
+              owner,
+              repo,
+              pull_number: pr.number,
+              merge_method: 'squash',
+              sha: pr.head.sha
+            });

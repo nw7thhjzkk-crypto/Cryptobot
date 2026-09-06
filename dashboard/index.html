@@ -212,6 +212,15 @@ function updateChart(data) {
   });
 }
 
+function escapeHTML(str) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 function updateWatchlist(data) {
   const c = document.getElementById('watchlist-container');
   if (!data.length) { c.innerHTML = '<div class="text-slate-400 text-center py-4 text-xs">Empty</div>'; return; }
@@ -222,7 +231,7 @@ function updateWatchlist(data) {
     else if (r.includes('bear') || r.includes('risk')) color = 'text-red-600';
     else if (r.includes('ranging')) color = 'text-blue-600';
     else if (r.includes('trend')) color = 'text-amber-600';
-    return `<div class="flex justify-between border-b border-slate-100 pb-1"><span class="font-medium">${item.symbol}</span><span class="${color} text-[10px] font-semibold uppercase">${item.regime||'-'}</span></div>`;
+    return `<div class="flex justify-between border-b border-slate-100 pb-1"><span class="font-medium">${escapeHTML(item.symbol)}</span><span class="${color} text-[10px] font-semibold uppercase">${escapeHTML(item.regime||'-')}</span></div>`;
   }).join('');
 }
 
@@ -233,7 +242,7 @@ function updatePositions(data) {
   c.innerHTML = data.map(p => {
     const pnl = +p.unrealized_pl || 0;
     const col = pnl >= 0 ? 'text-emerald-600' : 'text-red-600';
-    return `<div class="flex justify-between border-b border-slate-100 pb-1.5"><div><div class="font-semibold">${p.symbol}</div><div class="text-[10px] text-slate-500">${p.qty} @ $${(+p.avg_entry_price||0).toFixed(2)}</div></div><div class="text-right ${col} font-medium">${pnl>=0?'+':''}$${pnl.toFixed(2)}<div class="text-[10px] text-slate-500">$${(+p.current_price||0).toFixed(2)}</div></div></div>`;
+    return `<div class="flex justify-between border-b border-slate-100 pb-1.5"><div><div class="font-semibold">${escapeHTML(p.symbol)}</div><div class="text-[10px] text-slate-500">${escapeHTML(p.qty)} @ $${(+p.avg_entry_price||0).toFixed(2)}</div></div><div class="text-right ${col} font-medium">${pnl>=0?'+':''}$${pnl.toFixed(2)}<div class="text-[10px] text-slate-500">$${(+p.current_price||0).toFixed(2)}</div></div></div>`;
   }).join('');
 }
 
@@ -287,7 +296,7 @@ function updateTrades(data) {
     const sideCol = (t.side || '').toLowerCase() === 'buy' ? 'text-emerald-600' : 'text-red-600';
     const time = t.timestamp ? t.timestamp.replace('T',' ').replace('Z','') : '';
     const st = (t.status || '-').replace('pending_new', 'pending');
-    return `<tr class="border-b border-slate-100"><td class="px-2 py-1.5 text-slate-500 whitespace-nowrap">${time}</td><td class="px-2 py-1.5 font-medium">${t.symbol}</td><td class="px-2 py-1.5 ${sideCol} font-semibold uppercase">${t.side}</td><td class="px-2 py-1.5">${t.qty}</td><td class="px-2 py-1.5">$${(+t.price||0).toFixed(2)}</td><td class="px-2 py-1.5 capitalize">${st}</td><td class="px-2 py-1.5 text-[10px] uppercase">${t.regime||'-'}</td></tr>`;
+    return `<tr class="border-b border-slate-100"><td class="px-2 py-1.5 text-slate-500 whitespace-nowrap">${escapeHTML(time)}</td><td class="px-2 py-1.5 font-medium">${escapeHTML(t.symbol)}</td><td class="px-2 py-1.5 ${sideCol} font-semibold uppercase">${escapeHTML(t.side)}</td><td class="px-2 py-1.5">${escapeHTML(t.qty)}</td><td class="px-2 py-1.5">$${(+t.price||0).toFixed(2)}</td><td class="px-2 py-1.5 capitalize">${escapeHTML(st)}</td><td class="px-2 py-1.5 text-[10px] uppercase">${escapeHTML(t.regime||'-')}</td></tr>`;
   }).join('');
 }
 
@@ -305,7 +314,7 @@ function updateSignals(data) {
     const time = s.timestamp ? s.timestamp.replace('T',' ').replace('Z','') : '';
     const conf = ((+s.confidence || 0) * 100).toFixed(0);
     const reason = (s.reason || '').slice(0, 70);
-    return `<tr class="border-b border-slate-100"><td class="px-2 py-1.5 text-slate-500 whitespace-nowrap">${time}</td><td class="px-2 py-1.5 font-medium">${s.symbol}</td><td class="px-2 py-1.5 ${col} font-semibold">${sig}</td><td class="px-2 py-1.5">${conf}%</td><td class="px-2 py-1.5 text-[10px] uppercase">${s.regime||'-'}</td><td class="px-2 py-1.5 text-slate-500 max-w-xs truncate">${reason}</td></tr>`;
+    return `<tr class="border-b border-slate-100"><td class="px-2 py-1.5 text-slate-500 whitespace-nowrap">${escapeHTML(time)}</td><td class="px-2 py-1.5 font-medium">${escapeHTML(s.symbol)}</td><td class="px-2 py-1.5 ${col} font-semibold">${escapeHTML(sig)}</td><td class="px-2 py-1.5">${escapeHTML(conf)}%</td><td class="px-2 py-1.5 text-[10px] uppercase">${escapeHTML(s.regime||'-')}</td><td class="px-2 py-1.5 text-slate-500 max-w-xs truncate">${escapeHTML(reason)}</td></tr>`;
   }).join('');
 }
 </script>
