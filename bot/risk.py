@@ -116,6 +116,12 @@ class RiskEngine:
         self.max_position_pct = max_position_pct
         self.max_daily_loss = max_daily_loss
 
+    def check_daily_loss_limit(self, start_of_day_equity: float, current_equity: float) -> bool:
+        if start_of_day_equity <= 0:
+             return True
+        loss_pct = (start_of_day_equity - current_equity) / start_of_day_equity
+        return loss_pct < self.max_daily_loss
+
     def evaluate_order(
         self,
         symbol: str,
@@ -123,7 +129,8 @@ class RiskEngine:
         qty: float,
         price: float,
         equity: float,
-        buying_power: float
+        buying_power: float,
+        start_of_day_equity: Optional[float] = None
     ) -> Dict[str, Any]:
 
         if signal == "HOLD":
@@ -141,6 +148,12 @@ class RiskEngine:
         if not self.paper_mode:
             logger.warning("LIVE TRADING MODE DETECTED. Blocking orders to prevent live execution.")
             return {"approved": False, "reason": "PAPER_MODE_REQUIRED"}
+
+        if start_of_day_equity is not None and not self.check_daily_loss_limit(start_of_day_equity, equity):
+             return {
+                 "approved": False,
+                 "reason": "DAILY_LOSS_LIMIT_REACHED"
+             }
 
         position_value = qty * price
         max_allowed_value = equity * self.max_position_pct

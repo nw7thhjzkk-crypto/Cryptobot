@@ -16,6 +16,7 @@ class ExecutionEngine:
 
         cache_key = f"{symbol}_{signal}_{qty}"
         if cache_key in self.submitted_orders_cache:
+            logger.info(f"Duplicate order prevented by idempotency cache: {cache_key}")
             return {"success": False, "reason": "Duplicate order detected in cache"}
 
         max_retries = 3

@@ -62,9 +62,24 @@ Respond ONLY with valid JSON in this schema (no markdown):
                 generation_config={"response_mime_type": "application/json"}
             )
             raw = response.text.strip()
-            return json.loads(raw)
+            parsed = json.loads(raw)
+
+            # Explicitly validate schema fields and bounds
+            if not isinstance(parsed, dict):
+                 raise ValueError("AI generated response is not a dictionary.")
+            if not all(k in parsed for k in ["proposed_parameters", "hypothesis", "expected_outcome"]):
+                raise ValueError("Invalid AI JSON schema: missing required keys.")
+
+            params = parsed.get("proposed_parameters", {})
+            for key, val in params.items():
+                 if not isinstance(val, (int, float)):
+                      raise ValueError(f"Invalid parameter value for {key}: must be numeric.")
+                 if val < 0 or val > 1000:
+                      raise ValueError(f"Invalid parameter value for {key}: out of safe bounds (0-1000).")
+
+            return parsed
         except Exception as e:
-            logger.error(f"Evolution hypothesis generation failed: {e}")
+            logger.error(f"Evolution hypothesis validation failed: {e}")
             return None
 
     def evaluate_hypothesis(self, agent_class, symbol: str, data: pd.DataFrame, hypothesis_params: dict):

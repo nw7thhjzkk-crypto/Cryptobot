@@ -5,6 +5,7 @@ It provides the necessary hooks, boundaries, and CI/CD workflows to allow an ext
 
 ## Current Status
 - **DeerFlow Ready:** Yes.
+- **DeerFlow Integration Status:** DEERFLOW-READY (Configured for async pipeline, no execution access).
 - **DeerFlow Integrated:** No. The actual DeerFlow engine is external.
 - **Automated Research:** `EvolutionEngine` acts as a lightweight, internal AI hypothesis generator for testing the CI/CD pipeline hook, but does not represent full DeerFlow capabilities.
 

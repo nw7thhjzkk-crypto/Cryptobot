@@ -8,6 +8,8 @@ class BaseAgent:
         self.parameters = parameters or {}
         # By default, compatible with all if None
         self.regime_compatibility = regime_compatibility
+        self.expected_holding_period = None
+        self.transaction_cost_sensitivity = None
 
     def analyze(self, symbol: str, price_history: pd.DataFrame, **kwargs) -> Dict[str, Any]:
         raise NotImplementedError("Subclasses must implement analyze method.")

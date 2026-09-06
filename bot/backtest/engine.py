@@ -27,7 +27,7 @@ class BacktestEngine:
             # The trade will be executed on the NEXT bar's open (realistic timing)
             # For simplicity in this engine, we'll execute at current bar's close + slippage
             signal_res = agent.analyze(symbol, window, benchmark_history=bench_window)
-            signal = signal_res.get("signal", "HOLD")
+            signal = signal_res.get("signal", "HOLD") if isinstance(signal_res, dict) else "HOLD"
 
             current_price = float(data['close'].iloc[i-1])
 

@@ -1,6 +1,18 @@
 import pandas as pd
 import numpy as np
 
+def calculate_sma(df: pd.DataFrame, length: int = 14) -> pd.Series:
+    """Calculate Simple Moving Average (SMA)."""
+    if len(df) < length:
+        return pd.Series(dtype=float)
+    return df['close'].rolling(window=length, min_periods=length).mean()
+
+def calculate_ema(df: pd.DataFrame, length: int = 14) -> pd.Series:
+    """Calculate Exponential Moving Average (EMA)."""
+    if len(df) < length:
+        return pd.Series(dtype=float)
+    return df['close'].ewm(span=length, adjust=False).mean()
+
 def calculate_atr(df: pd.DataFrame, length: int = 14) -> pd.Series:
     """Calculate Average True Range (ATR)."""
     if df.empty or len(df) < length + 1:

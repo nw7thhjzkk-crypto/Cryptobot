@@ -128,6 +128,9 @@ def main_loop():
             if breaker_active:
                 logger.warning("Drawdown breaker active. Halting new entries this iteration.")
 
+            # Record start of day equity proxy (first loaded history point, or current if none)
+            start_of_day_equity = equity_history[0] if equity_history else equity
+
             # Batch fetch history for benchmark and watchlist
             all_symbols = list(set([BENCHMARK_SYMBOL] + WATCHLIST))
             batch_res = get_price_history_batch(all_symbols, lookback_days=250)
@@ -207,8 +210,13 @@ def main_loop():
                         logger.info(f"Already holding {symbol}, skip additional BUY")
                         continue
 
+                    # Fetch basic volatility for inverse vol constraints
+                    from bot.factors import calculate_volatility
+                    vol_s = calculate_volatility(df)
+                    vol_val = float(vol_s.iloc[-1]) if (vol_s is not None and not vol_s.empty) else None
+
                     portfolio_eval = portfolio_engine.evaluate(
-                        symbol, proposed_signal, open_positions, current_price, equity
+                        symbol, proposed_signal, open_positions, current_price, equity, symbol_volatility=vol_val
                     )
                     if not portfolio_eval["approved"]:
                         logger.info(f"Portfolio rejected {proposed_signal} for {symbol}: {portfolio_eval['reason']}")
@@ -241,13 +249,13 @@ def main_loop():
                             continue
 
                     risk_eval = risk_engine.evaluate_order(
-                        symbol, proposed_signal, qty, current_price, equity, buying_power
+                        symbol, proposed_signal, qty, current_price, equity, buying_power, start_of_day_equity=start_of_day_equity
                     )
                     if not risk_eval["approved"]:
                         logger.warning(f"Risk rejected {proposed_signal} for {symbol}: {risk_eval['reason']}")
                         continue
 
-                    logger.info(f"Symbol: {symbol} | Regime: {regime_str} | Sleeve: {primary_agent} | Action: {proposed_signal} | Qty: {qty}")
+                    logger.info("Signal decision: symbol=%s proposed=%s regime=%s confidence=%.3f primary_agent=%s reason=%s", symbol, proposed_signal, regime_str, consensus_result.get('confidence', 0.0), primary_agent, consensus_result.get('reason', ''))
 
                     order_res = execution_engine.execute_order(symbol, proposed_signal, qty)
 

@@ -87,7 +87,7 @@ class ConsensusEngine:
                      is_compatible = False
 
             if not is_compatible:
-                logger.debug(f"Strategy {agent_name} blocked due to regime incompatibility ({regime})")
+                logger.debug(f"Strategy {agent_name} explicitly blocked via multiplier 0.0 due to strict regime gate: {regime}")
                 regime_mult = 0.0
 
             # Even if regime multiplier is zero from dictionary, ensure the hard gate holds
@@ -104,7 +104,7 @@ class ConsensusEngine:
             total_score += weighted_score
             total_weight += final_weight
 
-            if abs(weighted_score) > abs(highest_weighted_score):
+            if abs(weighted_score) > abs(highest_weighted_score) and regime_mult > 0.0:
                 highest_weighted_score = weighted_score
                 primary_agent = agent_name
 
