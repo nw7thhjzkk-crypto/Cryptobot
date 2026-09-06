@@ -1,4 +1,5 @@
 import pandas as pd
+import numpy as np
 from typing import Dict, Any
 from bot.factors import calculate_adx, calculate_atr
 
@@ -25,7 +26,6 @@ class MarketRegimeEngine:
         sma_f = df['close'].rolling(window=self.sma_fast).mean()
         sma_s = df['close'].rolling(window=self.sma_slow).mean()
 
-        import numpy as np
         if adx is None or adx.empty or atr.empty or sma_s.empty or np.isnan(adx.iloc[-1]) or np.isnan(atr.iloc[-1]) or float(atr.iloc[-1]) < 0 or float(adx.iloc[-1]) < 0:
             return {"regime": "unknown", "confidence": 0.0, "reason": "Calculation failed or NaN"}
 
