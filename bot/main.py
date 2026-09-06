@@ -247,6 +247,7 @@ def main_loop():
                         logger.warning(f"Risk rejected {proposed_signal} for {symbol}: {risk_eval['reason']}")
                         continue
 
+                    primary_agent = consensus_result.get("primary_agent", "multi-agent")
                     logger.info(f"Symbol: {symbol} | Regime: {regime_str} | Sleeve: {primary_agent} | Action: {proposed_signal} | Qty: {qty}")
 
                     order_res = execution_engine.execute_order(symbol, proposed_signal, qty)
@@ -259,7 +260,6 @@ def main_loop():
                     status = order_res.get("status", "failed" if not order_res.get("success") else "submitted")
                     order_id = order_res.get("order_id", "none")
                     reason = order_res.get("reason", "")
-                    primary_agent = consensus_result.get("primary_agent", "multi-agent")
 
                     log_trade([
                         now_str, symbol, proposed_signal, qty, current_price,

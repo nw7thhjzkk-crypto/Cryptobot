@@ -1,5 +1,5 @@
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from alpaca.trading.client import TradingClient
 from alpaca.trading.requests import MarketOrderRequest
@@ -77,7 +77,7 @@ def get_latest_price(symbol: str):
 
 def get_price_history(symbol: str, lookback_days: int = 250):
     try:
-        end = datetime.utcnow()
+        end = datetime.now(timezone.utc)
         start = end - timedelta(days=lookback_days + 10)
 
         if _is_crypto(symbol):
@@ -108,7 +108,7 @@ def get_price_history(symbol: str, lookback_days: int = 250):
 
 def get_price_history_batch(symbols: list, lookback_days: int = 250):
     try:
-        end = datetime.utcnow()
+        end = datetime.now(timezone.utc)
         start = end - timedelta(days=lookback_days + 10)
 
         crypto_symbols = [s for s in symbols if _is_crypto(s)]

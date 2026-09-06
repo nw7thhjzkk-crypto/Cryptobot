@@ -1,0 +1,39 @@
+name: CI Pipeline
+
+on:
+  push:
+    branches: [ "**" ]
+  pull_request:
+    branches: [ "**" ]
+
+jobs:
+  test-and-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest flake8
+
+      - name: Run Tests
+        env:
+          ALPACA_API_KEY: "dummy"
+          ALPACA_SECRET_KEY: "dummy"
+          GOOGLE_SERVICE_ACCOUNT_JSON: "{}"
+          GOOGLE_SHEET_ID: "dummy"
+          PAPER_MODE: "true"
+        run: |
+          PYTHONPATH=. python -m pytest tests/
+
+      - name: Run Syntax & Lint Checks
+        run: |
+          flake8 bot/ tests/ --count --select=E9,F63,F7,F82 --show-source --statistics
