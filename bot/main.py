@@ -247,7 +247,8 @@ def main_loop():
                         logger.warning(f"Risk rejected {proposed_signal} for {symbol}: {risk_eval['reason']}")
                         continue
 
-                    logger.info(f"Symbol: {symbol} | Regime: {regime_str} | Sleeve: {primary_agent} | Action: {proposed_signal} | Qty: {qty}")
+                    primary_agent_name = consensus_result.get("primary_agent", "multi-agent")
+                    logger.info(f"Symbol: {symbol} | Regime: {regime_str} | Sleeve: {primary_agent_name} | Action: {proposed_signal} | Qty: {qty}")
 
                     order_res = execution_engine.execute_order(symbol, proposed_signal, qty)
 

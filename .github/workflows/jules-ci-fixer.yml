@@ -1,0 +1,92 @@
+name: Jules CI Fixer
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types:
+      - completed
+
+jobs:
+  fix_ci:
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'failure' }}
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+    steps:
+      - name: Fetch failing PR info
+        id: pr_info
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const run_id = context.payload.workflow_run.id;
+
+            // Get the pull requests associated with the failing run
+            const run = await github.rest.actions.getWorkflowRun({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              run_id: run_id
+            });
+
+            const prs = run.data.pull_requests;
+            if (prs.length === 0) {
+              console.log("No PRs associated with this failing CI run. Exiting.");
+              return;
+            }
+
+            const pr_number = prs[0].number;
+            const pr = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: pr_number
+            });
+
+            // Strictly check Jules provenance
+            if (pr.data.user.login !== "google-labs-jules[bot]") {
+              console.log("PR author is not google-labs-jules[bot]. Exiting.");
+              core.setOutput("is_jules_pr", "false");
+              return;
+            }
+            core.setOutput("is_jules_pr", "true");
+
+            // Limit retries
+            const comments = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: pr_number
+            });
+
+            const fix_attempts = comments.data.filter(c => c.body && c.body.includes("[Jules CI Fixer]")).length;
+            const max_attempts = 3;
+            if (fix_attempts >= max_attempts) {
+              console.log(`Max fix attempts (${max_attempts}) reached. Stopping recursion.`);
+              core.setOutput("should_fix", "false");
+              return;
+            }
+            core.setOutput("should_fix", "true");
+
+            core.setOutput("pr_number", pr_number);
+            core.setOutput("branch", pr.data.head.ref);
+
+            // Add a comment to track retries
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: pr_number,
+              body: `[Jules CI Fixer] Attempting to fix CI failure (Attempt ${fix_attempts + 1}/${max_attempts})`
+            });
+
+      - name: Invoke Jules Fixer
+        if: steps.pr_info.outputs.is_jules_pr == 'true' && steps.pr_info.outputs.should_fix == 'true'
+        uses: google-labs-code/jules-action@v1
+        with:
+          prompt: |
+            The CI workflow failed on your recent changes.
+            Please review the recent changes and fix the CI errors.
+            Ensure that tests pass, linting passes, and high-risk rules are observed.
+          starting_branch: ${{ steps.pr_info.outputs.branch }}
+          jules_api_key: ${{ secrets.JULES_API_KEY }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          automation_mode: AUTO_CREATE_PR
