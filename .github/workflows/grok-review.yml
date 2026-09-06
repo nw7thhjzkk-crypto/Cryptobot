@@ -1,0 +1,237 @@
+name: Grok Review & Auto-Merge
+
+on:
+  workflow_run:
+    workflows: ["Trading Bot"]
+    types:
+      - completed
+
+jobs:
+  review_and_merge:
+    if: github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      checks: read
+    steps:
+      - name: Fetch PR Details
+        id: fetch-pr
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const workflowRunId = context.payload.workflow_run.id;
+            const run = await github.rest.actions.getWorkflowRun({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              run_id: workflowRunId
+            });
+            const prs = run.data.pull_requests;
+            if (prs.length === 0) {
+              console.log("No PRs found for this workflow run.");
+              return;
+            }
+            const pr = prs[0];
+            const prDetails = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: pr.number
+            });
+            return {
+              number: pr.number,
+              head_sha: prDetails.data.head.sha,
+              base_branch: prDetails.data.base.ref,
+              author: prDetails.data.user.login,
+              state: prDetails.data.state,
+              is_draft: prDetails.data.draft,
+              head_repo_id: prDetails.data.head.repo.id,
+              base_repo_id: prDetails.data.base.repo.id,
+              html_url: prDetails.data.html_url,
+              body: prDetails.data.body
+            };
+
+      - name: Validate PR Eligibility
+        id: validate
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = ${{ steps.fetch-pr.outputs.result }};
+            if (!pr) {
+              core.setFailed("PR not found.");
+              return;
+            }
+            if (pr.state !== 'open') core.setFailed("PR is not open.");
+            if (pr.is_draft) core.setFailed("PR is a draft.");
+
+            const expectedSha = context.payload.workflow_run.head_sha;
+            if (pr.head_sha !== expectedSha) {
+              core.setFailed(`SHA mismatch. PR HEAD: ${pr.head_sha}, Workflow HEAD: ${expectedSha}`);
+            }
+
+            if (pr.head_repo_id !== pr.base_repo_id) {
+               core.setFailed("PR is from a fork, not permitted.");
+            }
+
+            const defaultBranchResponse = await github.rest.repos.get({
+               owner: context.repo.owner,
+               repo: context.repo.repo
+            });
+            const defaultBranch = defaultBranchResponse.data.default_branch;
+
+            if (pr.base_branch !== defaultBranch && !pr.base_branch.startsWith('feature/paper-trading-bot-')) {
+               core.setFailed(`PR base branch ${pr.base_branch} is not the default branch or a production branch.`);
+            }
+
+            // Jules provenance check
+            const commits = await github.rest.pulls.listCommits({
+               owner: context.repo.owner,
+               repo: context.repo.repo,
+               pull_number: pr.number
+            });
+
+            let isJules = false;
+            for (const commit of commits.data) {
+                if (commit.commit.author.name === "google-labs-jules[bot]" || commit.commit.author.email.includes("jules")) {
+                    isJules = true;
+                    break;
+                }
+            }
+            if (!isJules) {
+                core.setFailed("Could not verify Jules provenance for this PR.");
+            }
+
+            core.setOutput("pr_number", pr.number);
+            core.setOutput("head_sha", pr.head_sha);
+            core.setOutput("pr_body", pr.body);
+
+      - name: Fetch PR Files
+        id: files
+        if: success()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const prNumber = ${{ steps.validate.outputs.pr_number }};
+            const files = await github.rest.pulls.listFiles({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: prNumber
+            });
+            const fileNames = files.data.map(f => f.filename);
+
+            const highRiskPatterns = [
+              /^\.github\/workflows\//,
+              /^AGENTS\.md$/,
+              /^opencode\.json$/,
+              /bot\/broker\.py/,
+              /bot\/execution\.py/,
+              /bot\/risk\.py/,
+              /bot\/portfolio\.py/,
+              /bot\/config\.py/,
+              /bot\/agents\//,
+              /bot\/consensus\.py/,
+              /server\.py/,
+              /bot\/sheets\.py/,
+              /bot\/main\.py/
+            ];
+
+            for (const filename of fileNames) {
+               for (const pattern of highRiskPatterns) {
+                   if (pattern.test(filename)) {
+                       core.setFailed(`PR modifies high-risk file: ${filename}. Manual review required.`);
+                       return;
+                   }
+               }
+            }
+            console.log("No high-risk files modified.");
+
+      - name: Run Grok Review
+        id: grok
+        if: success()
+        env:
+          GROK_API_KEY: ${{ secrets.GROK_API_KEY }}
+          PR_NUMBER: ${{ steps.validate.outputs.pr_number }}
+          PR_BODY: ${{ steps.validate.outputs.pr_body }}
+        run: |
+          if [ -z "$GROK_API_KEY" ]; then
+            echo "GROK INTEGRATION IMPLEMENTED BUT LIVE GROK VERIFICATION BLOCKED BY MISSING GROK_API_KEY"
+            # Using GitHub Actions core command to fail step instead of bash exit
+            echo "::error::GROK_API_KEY is missing."
+            # Fail without exiting shell in a way that breaks session parsing
+            false
+          fi
+
+          echo "Fetching PR diff..."
+          # Note: Uses GITHUB_TOKEN for API access to get the diff
+          PR_DIFF=$(curl -sSL -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" -H "Accept: application/vnd.github.v3.diff" "https://api.github.com/repos/${{ github.repository }}/pulls/$PR_NUMBER")
+
+          echo "Sending diff to Grok API for review..."
+
+          # We formulate a strict prompt for Grok to return a JSON response with status PASS, WARN, or BLOCK.
+          JSON_PAYLOAD=$(jq -n \
+            --arg diff "$PR_DIFF" \
+            --arg body "$PR_BODY" \
+            '{
+              model: "grok-beta",
+              messages: [
+                {
+                  role: "system",
+                  content: "You are an autonomous AI security and architecture reviewer for a trading bot. Analyze the provided PR diff. You must respond in valid JSON format only. The JSON must contain a \"status\" field which must be exactly one of: \"PASS\", \"WARN\", or \"BLOCK\". It must also contain a \"reason\" field explaining the decision. A \"BLOCK\" should be issued for any secret leaks, bypass of paper-trading safety, unauthorized trading logic changes, or other security flaws."
+                },
+                {
+                  role: "user",
+                  content: ("PR Body:\n" + $body + "\n\nDiff:\n" + $diff)
+                }
+              ],
+              temperature: 0.1
+            }')
+
+          RESPONSE=$(curl -sS -X POST "https://api.x.ai/v1/chat/completions" \
+               -H "Authorization: Bearer $GROK_API_KEY" \
+               -H "Content-Type: application/json" \
+               -d "$JSON_PAYLOAD")
+
+          echo "Grok API Response:"
+          echo "$RESPONSE" | jq .
+
+          # Extract the content from Grok's response
+          GROK_REPLY=$(echo "$RESPONSE" | jq -r '.choices[0].message.content')
+
+          # Ensure Grok actually returned valid JSON content
+          if [ -z "$GROK_REPLY" ] || [ "$GROK_REPLY" == "null" ]; then
+            echo "::error::Empty or invalid response from Grok API."
+            false
+          fi
+
+          # Extract status from the inner JSON payload
+          GROK_STATUS=$(echo "$GROK_REPLY" | jq -r '.status')
+          GROK_REASON=$(echo "$GROK_REPLY" | jq -r '.reason')
+
+          echo "Grok Status: $GROK_STATUS"
+          echo "Grok Reason: $GROK_REASON"
+
+          if [ "$GROK_STATUS" == "BLOCK" ]; then
+            echo "::error::Grok blocked the merge. Reason: $GROK_REASON"
+            false
+          elif [ "$GROK_STATUS" == "PASS" ] || [ "$GROK_STATUS" == "WARN" ]; then
+            echo "Grok approved the merge (Status: $GROK_STATUS)."
+          else
+            echo "::error::Grok returned an unrecognized status: $GROK_STATUS. Failing closed."
+            false
+          fi
+
+      - name: Auto-Merge
+        if: success()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const prNumber = ${{ steps.validate.outputs.pr_number }};
+            const expectedSha = "${{ steps.validate.outputs.head_sha }}";
+
+            await github.rest.pulls.merge({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: prNumber,
+              merge_method: 'squash',
+              sha: expectedSha
+            });
+            console.log(`Successfully squash-merged PR #${prNumber}`);
