@@ -45,3 +45,7 @@ Manual intervention is only required if:
 - The task modifies high-risk paths (e.g., CI workflows, security config).
 - CI fails more than 3 times.
 - There are merge conflicts.
+
+## Autonomous Pipeline Smoke Test
+
+This repository's Jules automation pipeline has been smoke-tested.
