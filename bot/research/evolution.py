@@ -62,7 +62,10 @@ Respond ONLY with valid JSON in this schema (no markdown):
                 generation_config={"response_mime_type": "application/json"}
             )
             raw = response.text.strip()
-            return json.loads(raw)
+            parsed = json.loads(raw)
+            if not all(k in parsed for k in ["proposed_parameters", "hypothesis", "expected_outcome"]):
+                raise ValueError("Invalid AI JSON schema")
+            return parsed
         except Exception as e:
             logger.error(f"Evolution hypothesis generation failed: {e}")
             return None

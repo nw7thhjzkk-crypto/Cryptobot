@@ -247,7 +247,7 @@ def main_loop():
                         logger.warning(f"Risk rejected {proposed_signal} for {symbol}: {risk_eval['reason']}")
                         continue
 
-                    logger.info(f"Symbol: {symbol} | Regime: {regime_str} | Sleeve: {primary_agent} | Action: {proposed_signal} | Qty: {qty}")
+                    logger.info("Signal decision: symbol=%s proposed=%s regime=%s confidence=%.3f primary_agent=%s reason=%s", symbol, proposed_signal, regime_str, consensus_result.get('confidence', 0.0), primary_agent, consensus_result.get('reason', ''))
 
                     order_res = execution_engine.execute_order(symbol, proposed_signal, qty)
 

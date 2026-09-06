@@ -29,6 +29,7 @@ class RobustnessTester:
         for _ in range(self.num_simulations):
             # Bootstrap resampling with replacement
             simulated = np.random.choice(returns, size=len(returns), replace=True)
+            simulated = simulated - 0.001
             # Cumulative compound return
             comp_ret = np.prod(1 + simulated) - 1
             simulated_returns.append(comp_ret)

@@ -104,7 +104,7 @@ class ConsensusEngine:
             total_score += weighted_score
             total_weight += final_weight
 
-            if abs(weighted_score) > abs(highest_weighted_score):
+            if abs(weighted_score) > abs(highest_weighted_score) and regime_mult > 0.0:
                 highest_weighted_score = weighted_score
                 primary_agent = agent_name
 
