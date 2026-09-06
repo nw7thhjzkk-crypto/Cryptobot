@@ -14,4 +14,4 @@ This repository uses an end-to-end GitHub-native automation pipeline for Jules:
 2. **Jules Execution:** Jules receives the task, creates a branch from the main/production branch, implements the requested changes, and opens a Pull Request.
 3. **CI Validation:** The `CI` workflow (`.github/workflows/ci.yml`) automatically runs tests and linters.
 4. **Auto-Repair:** If CI fails, the `Jules CI Fixer` workflow (`.github/workflows/jules-ci-fixer.yml`) prompts Jules to fix the errors, up to a maximum of 3 retries to prevent recursion.
-5. **Auto-Merge:** If CI passes, the `Auto-merge Jules PRs` workflow (`.github/workflows/auto-merge-jules.yml`) evaluates strict deterministic gates. If all conditions (provenance, exact SHA match, no conflicts, no high-risk files modified, etc.) are met, the PR is automatically squash-merged.
+5. **Auto-Merge:** If CI passes, the `Auto-merge eligible PRs` workflow (`.github/workflows/auto-merge-eligible-prs.yml`) evaluates strict deterministic gates. If all conditions (exact SHA match, no conflicts, no high-risk files modified, correct repository, etc.) are met, the PR is automatically squash-merged.
