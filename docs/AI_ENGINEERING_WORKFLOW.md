@@ -29,15 +29,14 @@ If the CI workflow fails:
 
 ### 5. Auto-Merge Safety Gates
 If the CI workflow passes:
-- **Trigger:** `.github/workflows/auto-merge-jules.yml` detects the success.
+- **Trigger:** `.github/workflows/auto-merge-eligible-prs.yml` detects the success.
 - **Action:** A GitHub script evaluates strict safety conditions:
   1.  **Repository:** Must be the same repository (no forks).
   2.  **Base Branch:** Must target the dynamic default/production branch.
   3.  **Draft Status:** PR must not be a draft.
-  4.  **Provenance:** Author must be exactly `google-labs-jules[bot]`.
-  5.  **Exact SHA Match:** The current HEAD SHA of the PR must exactly match the SHA that passed CI.
-  6.  **Conflicts:** The PR must be mergeable (no conflicts).
-  7.  **High-Risk Paths:** The PR must not modify critical infrastructure, CI workflows, or security files (e.g., `.github/workflows/**`, `AGENTS.md`).
+  4.  **Exact SHA Match:** The current HEAD SHA of the PR must exactly match the SHA that passed CI.
+  5.  **Conflicts:** The PR must be mergeable (no conflicts).
+  6.  **High-Risk Paths:** The PR must not modify critical infrastructure, CI workflows, or security files (e.g., `.github/workflows/**`, `AGENTS.md`).
 
 ### 6. Squash Merge
 If all safety gates pass, the PR is automatically squash-merged into the default branch using the GitHub API, specifying the exact validated SHA.
