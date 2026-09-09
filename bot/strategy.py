@@ -23,14 +23,8 @@ def calculate_adx(df: pd.DataFrame, length: int = 14) -> pd.Series:
     plus_dm = pd.Series(plus_dm, index=df.index)
     minus_dm = pd.Series(minus_dm, index=df.index)
 
-    high_low = df['high'] - df['low']
-    high_close = np.abs(df['high'] - df['close'].shift(1))
-    low_close = np.abs(df['low'] - df['close'].shift(1))
-    ranges = pd.concat([high_low, high_close, low_close], axis=1)
-    tr = np.max(ranges, axis=1)
+    atr = calculate_atr(df, length)
 
-    # Wilder's smoothing
-    atr = tr.ewm(alpha=1/length, min_periods=length, adjust=False).mean()
     plus_di = 100 * (plus_dm.ewm(alpha=1/length, min_periods=length, adjust=False).mean() / atr)
     minus_di = 100 * (minus_dm.ewm(alpha=1/length, min_periods=length, adjust=False).mean() / atr)
 
